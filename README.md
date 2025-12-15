@@ -1,190 +1,144 @@
-# LINE 提醒記事本 - Pipedream 雲端版
+# LINE 提醒記事本 - Google Apps Script (GAS) 雲端版
 
-## 🚀 快速開始
+## 🚀 專案簡介
 
-這是 LINE 提醒記事本的雲端版本，使用 Pipedream 提供 24/7 定時通知服務。
+這是 LINE 提醒記事本的 Google Apps Script (GAS) 雲端版本。
+透過 Google 免費提供的伺服器資源，實現 **24/7 全天候自動監控** 與 **LINE 通知發送**，無需開啟電腦或瀏覽器。
 
-### 📦 檔案說明
+## 📦 檔案說明
 
-```
+```text
 📁 專案檔案
-├── 📄 LineNotify_cloud.html          ← 網頁應用（雲端版）
-├── 📄 LineNotify_status_laste.html   ← 原始版本（需保持瀏覽器開啟）
-├── 📄 pipedream-workflow.js          ← Pipedream workflow 程式碼
-├── 📄 SETUP.md                       ← 詳細設定指南
+├── 📄 LineNotify_cloud.html          ← 前端網頁（操作介面，可放 GitHub Pages）
+├── 📄 gas-script.js                  ← 後端程式碼（需貼入 Google Apps Script）
+├── 📄 SETUP_GAS.md                   ← 詳細設定指南
 └── 📄 README.md                      ← 本檔案
 ```
 
-### ✨ 新版本特色
+## ✨ 版本特色
 
-**雲端版 (LineNotify_cloud.html)**
+### ☁️ 雲端版 (Google Apps Script)
 
-- ✅ 不需要保持瀏覽器開啟
-- ✅ 24/7 自動檢查和發送通知
-- ✅ 跨裝置同步資料
-- ✅ 資料儲存在 GitHub Gist
-- ✅ 完全免費方案
+- ✅ **完全自動化**：利用 Google 伺服器每分鐘或每 5 分鐘檢查一次。
+- ✅ **免掛機**：設定完成後，電腦關機、手機關閉螢幕均可正常運作。
+- ✅ **跨裝置同步**：資料儲存於 GitHub Gist，手機與電腦看到的資料一致。
+- ✅ **高穩定性**：Google 基礎建設提供穩定的定時觸發服務。
 
-**原始版 (LineNotify_status_laste.html)**
+## 📖 設定步驟（GAS 版）
 
-- ⚠️ 需要保持瀏覽器分頁開啟
-- ⚠️ 需要防止螢幕休眠
-- ✅ 資料儲存在本地
-- ✅ 不需要額外設定
+### 流程概覽
 
-### 🎯 使用哪個版本？
+1. **準備雲端儲存 (GitHub Gist)**
+   - 申請 GitHub Personal Access Token (需勾選 gist 權限)。
+   - 建立一個 Gist 用於儲存資料。
 
-| 需求               | 推薦版本  |
-| ------------------ | --------- |
-| 想要 24/7 自動運行 | 雲端版 ⭐ |
-| 想要跨裝置同步     | 雲端版 ⭐ |
-| 不想做額外設定     | 原始版    |
-| 只在單一裝置使用   | 原始版    |
-| 可以保持電腦開機   | 原始版    |
+2. **建立後端排程 (Google Apps Script)**
+   - 前往 script.google.com 建立新專案。
+   - 將 `gas-script.js` 的內容複製貼上。
+   - 設定 **專案屬性 (Script Properties)**：填入 `GITHUB_TOKEN`、`GIST_ID`、`LINE_TOKEN`。
+   - 設定 **觸發條件 (Triggers)**：設定「時間驅動」每 5 分鐘或 10 分鐘執行一次 `main` 函式。
 
-## 📖 設定步驟（雲端版）
+3. **設定前端網頁**
+   - 開啟 `LineNotify_cloud.html`。
+   - 在設定中填入 GitHub Token 與 Gist ID。
+   - 開始新增/管理您的提醒事項。
 
-### 簡要版本（5 步驟）
-
-1. **創建 GitHub Token**
-
-   - 前往 [GitHub Token 設定](https://github.com/settings/tokens/new?scopes=gist&description=LINE%20Reminder%20App)
-   - 勾選 `gist` 權限
-   - 複製 Token
-
-2. **註冊 Pipedream**
-
-   - 前往 [Pipedream](https://pipedream.com)
-   - 註冊免費帳號
-
-3. **創建 Workflow**
-
-   - 新增 Workflow
-   - 觸發器：Cron Schedule `*/5 * * * *`
-   - 貼上 `pipedream-workflow.js` 程式碼
-   - 設定環境變數：`GITHUB_TOKEN`（先不填 `GIST_ID`）
-
-4. **設定網頁**
-
-   - 開啟 `LineNotify_cloud.html`
-   - 填入 LINE 設定和 GitHub Token
-   - 儲存後會自動創建 Gist
-
-5. **完成設定**
-   - 複製 Gist ID 回填到 Pipedream
-   - 重新部署 Workflow
-   - 完成！
-
-📚 **詳細步驟請參閱：[SETUP.md](SETUP.md)**
+📚 **詳細圖文步驟請參閱：SETUP_GAS.md**
 
 ## 🎬 運作流程
 
 ```mermaid
 sequenceDiagram
     participant User as 使用者
-    participant Web as 網頁應用
-    participant Gist as GitHub Gist
-    participant PD as Pipedream
-    participant LINE as LINE API
+    participant Web as 網頁介面 (Local/Pages)
+    participant Gist as GitHub Gist (資料庫)
+    participant GAS as Google Apps Script
+    participant LINE as LINE Notify/Bot
 
-    User->>Web: 新增記事
-    Web->>Gist: 同步資料
-    Note over PD: 每 5 分鐘執行
-    PD->>Gist: 讀取記事資料
-    PD->>PD: 檢查提醒時間
+    Note left of Web: 前端操作
+    User->>Web: 新增/修改記事
+    Web->>Gist: 更新 JSON 資料 (Save)
+
+    Note right of GAS: 後端排程 (每 N 分鐘)
+    GAS->>GAS: 時間觸發器啟動
+    GAS->>Gist: 讀取最新資料
+    GAS->>GAS: 檢查是否有「待發送」且「時間到」的項目
+    
     alt 有到期提醒
-        PD->>LINE: 發送通知
-        LINE->>User: 收到提醒
-        PD->>Gist: 更新狀態
+        GAS->>LINE: 呼叫 API 發送訊息
+        LINE->>User: 手機收到 LINE 通知
+        GAS->>GAS: 計算下次提醒時間 (若為重複)
+        GAS->>Gist: 更新資料狀態 (已發送/更新時間)
     end
 ```
 
 ## ⚙️ 技術架構
 
-### 前端 (LineNotify_cloud.html)
+### 前端 (Client-side)
 
-- HTML5 + Vanilla JavaScript
-- Tailwind CSS 樣式
-- localStorage 本地快取
-- GitHub Gist API 整合
+- **介面**：HTML5 + Tailwind CSS (單一檔案)。
+- **邏輯**：JavaScript (ES6+)。
+- **功能**：負責資料的 CRUD (增刪改查) 與 Gist 同步。
 
-### 後端 (Pipedream)
+### 後端 (Server-side)
 
-- Node.js 執行環境
-- Cron 定時觸發
-- GitHub API
-- LINE Messaging API
+- **平台**：Google Apps Script (基於 V8 引擎)。
+- **核心**：`UrlFetchApp` (呼叫 GitHub 與 LINE API)。
+- **排程**：GAS Time-driven Triggers (定時觸發器)。
+- **安全**：使用 `PropertiesService` 儲存敏感 Token，不寫死在程式碼中。
 
-### 資料儲存
+### 資料庫
 
-- GitHub Gist（雲端 JSON 儲存）
-- localStorage（本地備份）
+- **GitHub Gist**：作為輕量級 JSON 資料庫，讓前端與後端共享數據。
 
-## 📊 免費方案限制
+## 📊 Google Apps Script 免費配額
 
-| 服務        | 免費額度     | 足夠使用？         |
-| ----------- | ------------ | ------------------ |
-| GitHub Gist | 無限制       | ✅ 是              |
-| Pipedream   | 10,000 次/月 | ✅ 是（每 5 分鐘） |
-| LINE API    | 按訊息計費   | ✅ 個人使用足夠    |
+GAS 對個人帳戶非常大方，對於個人提醒應用來說綽綽有餘：
 
-**每 5 分鐘執行一次**：
+| 項目 | 限制 | 足夠使用？ |
+|------|------|------------|
+| 觸發器執行時間 | 90 分鐘 / 天 | ✅ 是 (每次執行僅需約 1-2 秒) |
+| URL Fetch (API 呼叫) | 20,000 次 / 天 | ✅ 是 (遠大於每 5 分鐘一次的需求) |
+| 最大執行時間 | 6 分鐘 / 次 | ✅ 是 |
 
-- 每小時：12 次
-- 每天：288 次
-- 每月：8,640 次
-- **剩餘額度**：1,360 次（可手動觸發或測試）
+> **註**：建議設定每 5 分鐘或 10 分鐘檢查一次即可，過於頻繁 (如每分鐘) 雖然可行但較耗資源。
 
 ## 🔧 進階功能
 
-### 重複提醒
+### 🔄 智慧重複提醒
 
-- 每天重複
-- 每週重複（可選星期）
-- 每月重複（可選日期）
-- 設定結束日期
+- 支援 **每天**、**每週** (可選星期)、**每月** (可選日期)。
+- GAS 後端發送通知後，會自動計算並寫入下一次的提醒時間，實現真正的循環。
 
-### 完成狀態
+### 📲 完成狀態標記
 
-- 已發送後可標記完成/未完成
-- 視覺化圖示提示
+- 支援標記任務為「完成」或「未完成」。
+- 狀態同步儲存於雲端。
 
-### 資料管理
+### 📂 資料備份
 
-- 匯出/匯入 JSON 備份
-- 跨裝置同步
-- 自動雲端備份
+- 前端網頁支援匯出/匯入 JSON 備份檔，確保資料安全。
 
 ## 🐛 疑難排解
 
 ### 沒有收到通知？
 
-1. 檢查 Pipedream Event History 日誌
-2. 確認 GIST_ID 已設定
-3. 驗證 LINE Token 正確性
-4. 確認提醒時間已過 5 分鐘以上
+1. **檢查 GAS 執行紀錄**：
+   - 進入 GAS 編輯器左側的「執行項目 (Executions)」。
+   - 查看是否有 Failed 或 Error 的紀錄。
+
+2. **檢查屬性設定**：
+   - 確認 `GIST_ID` 和 `GITHUB_TOKEN` 在 GAS 的「專案設定」中是否正確。
+
+3. **檢查 LINE Token**：
+   - 確認 LINE Token 是否過期或被封鎖。
 
 ### 同步失敗？
 
-1. 檢查 GitHub Token 是否有效
-2. 確認網路連線
-3. 查看瀏覽器 Console 錯誤
-
-### 詳細解答請見：[SETUP.md - 常見問題](SETUP.md#常見問題)
-
-## 📝 版本資訊
-
-- **原始版本 (v20)**: 單機版，需保持開啟
-- **雲端版 (v21)**: Pipedream 整合，24/7 運行
-
-## 🙏 致謝
-
-- [Tailwind CSS](https://tailwindcss.com) - 樣式框架
-- [Lucide Icons](https://lucide.dev) - 圖示
-- [Pipedream](https://pipedream.com) - 自動化平台
-- [GitHub Gist](https://gist.github.com) - 資料儲存
+- 確認 GitHub Token 是否有勾選 `gist` 權限。
+- 確認 Gist ID 是否正確對應到您存放資料的那個 Gist。
 
 ---
 
 **Author**: Joy  
-**Created**: 2025-11-30
+**Updated**: 2025-12-15

@@ -613,54 +613,100 @@
         }
         function updateRepeatSummaryUI() { const div=document.getElementById('repeat-summary'), sel=document.getElementById('repeat-select'), btn=document.getElementById('edit-repeat-btn'); if(tempRepeatSettings){ sel.value='custom'; div.classList.remove('hidden'); btn.classList.remove('hidden'); div.innerHTML=getRepeatSummaryHtml(tempRepeatSettings); } else { sel.value='none'; div.classList.add('hidden'); btn.classList.add('hidden'); div.innerText=''; } }
 
-        // --- Rendering ---
-        function createNoteCardHtml(note) {
-            const isExpired = note.datetime && new Date(note.datetime) < new Date();
-            let cardStyle = 'bg-white border-slate-100'; 
-            let statusClass = 'bg-amber-100 text-amber-700';
-            let statusText = '<span><i data-lucide="clock" class="inline w-3 h-3"></i> 待發送</span>';
+// --- Rendering ---
+function createNoteCardHtml(note) {
+    const now = new Date();
+    const isRepeat = note.repeat && note.repeat.type === 'repeat';
 
-            if (note.sent) {
-                cardStyle = 'bg-emerald-50 border border-emerald-200';
-                statusClass = 'bg-emerald-100 text-emerald-700';
-                statusText = '<span><i data-lucide="check-circle" class="inline w-3 h-3"></i> 已發送</span>';
-            } else if (isExpired) {
-                cardStyle = 'bg-rose-50 border border-rose-200';
-                statusClass = 'bg-rose-100 text-rose-700';
-                statusText = '過期未發';
-            } else {
-                cardStyle = 'bg-amber-50 border border-transparent shadow-sm';
-            }
+    // 是否已過期（只用來判斷未發送的情況）
+    const isExpired = note.datetime && new Date(note.datetime) < now;
 
-            let repeatIcon = note.repeat ? `<span class="ml-2 text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded flex items-center gap-1"><i data-lucide="refresh-cw" class="w-3 h-3"></i> 重複</span>` : '';
-            const repeatSummary = note.repeat ? `<div class="mt-3 text-xs text-slate-500 leading-relaxed">${getRepeatSummaryHtml(note.repeat)}</div>` : '';
+    // 是否為 repeat 且最近一次已成功發送
+    let repeatJustSent = false;
+    if (isRepeat && note.lastSentAt) {
+        const lastSent = new Date(note.lastSentAt);
+        const scheduled = new Date(note.datetime);
+        repeatJustSent = lastSent >= scheduled;
+    }
 
-            let completionIcon = '';
-            if (note.sent && note.completionStatus === 'completed') {
-                completionIcon = `<i data-lucide="check" class="inline w-5 h-5 text-emerald-700 mr-1 align-text-bottom"></i>`;
-            } else if (note.sent && note.completionStatus === 'incomplete') {
-                completionIcon = `<i data-lucide="triangle" class="inline w-4 h-4 text-amber-700 fill-current mr-1 align-text-bottom"></i>`;
-            }
+    let cardStyle = 'bg-white border-slate-100'; 
+    let statusClass = 'bg-amber-100 text-amber-700';
+    let statusText = '<span><i data-lucide="clock" class="inline w-3 h-3"></i> 待發送</span>';
 
-            return `<div class="relative group rounded-xl p-5 transition-all hover:shadow-md fade-in ${cardStyle}">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1 ${statusClass}">${statusText}</div>
-                    ${repeatIcon}
-                </div>
-                <div class="pr-2">
-                    <p class="text-slate-800 whitespace-pre-wrap font-medium text-lg mb-3">${completionIcon}${escapeHtml(note.content)}</p>
-                </div>
-                
-                <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-200/50 text-sm">
-                    <div class="text-slate-500">${note.datetime ? `<span class="flex items-center gap-1"><i data-lucide="clock" class="w-3.5 h-3.5"></i> ${formatDateTime(note.datetime)}</span>` : '<span class="text-slate-400 italic">無提醒</span>'}</div>
-                    <div class="flex gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onclick="startEdit('${note.id}')" class="p-2 text-amber-500 hover:bg-amber-50 rounded-lg"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                        <button onclick="deleteNote('${note.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                    </div>
-                </div>
-                ${repeatSummary}
-            </div>`;
-        }
+    /* ========= 狀態判斷核心 ========= */
+    if (note.sent || repeatJustSent) {
+        // ✅ 單次已發送 or 重複已發送
+        cardStyle = 'bg-emerald-50 border border-emerald-200';
+        statusClass = 'bg-emerald-100 text-emerald-700';
+        statusText = '<span><i data-lucide="check-circle" class="inline w-3 h-3"></i> 已發送</span>';
+
+    } else if (isExpired) {
+        // ❌ 已過排程時間但尚未發送
+        cardStyle = 'bg-rose-50 border border-rose-200';
+        statusClass = 'bg-rose-100 text-rose-700';
+        statusText = '過期未發';
+
+    } else {
+        // ⏳ 尚未到時間
+        cardStyle = 'bg-amber-50 border border-transparent shadow-sm';
+    }
+
+    /* ========= UI 其他顯示 ========= */
+    let repeatIcon = isRepeat
+        ? `<span class="ml-2 text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded flex items-center gap-1">
+             <i data-lucide="refresh-cw" class="w-3 h-3"></i> 重複
+           </span>`
+        : '';
+
+    const repeatSummary = isRepeat
+        ? `<div class="mt-3 text-xs text-slate-500 leading-relaxed">
+             ${getRepeatSummaryHtml(note.repeat)}
+           </div>`
+        : '';
+
+    let completionIcon = '';
+    if (note.sent && note.completionStatus === 'completed') {
+        completionIcon = `<i data-lucide="check" class="inline w-5 h-5 text-emerald-700 mr-1 align-text-bottom"></i>`;
+    } else if (note.sent && note.completionStatus === 'incomplete') {
+        completionIcon = `<i data-lucide="triangle" class="inline w-4 h-4 text-amber-700 fill-current mr-1 align-text-bottom"></i>`;
+    }
+
+    return `
+    <div class="relative group rounded-xl p-5 transition-all hover:shadow-md fade-in ${cardStyle}">
+        <div class="flex justify-between items-start mb-2">
+            <div class="text-xs font-bold px-2 py-1 rounded-full flex  gap-1 ${statusClass}">
+                ${statusText}
+            </div>
+            ${repeatIcon}
+        </div>
+
+        <div class="pr-2">
+            <p class="text-slate-800 whitespace-pre-wrap font-medium text-lg mb-3">${completionIcon}${escapeHtml(note.content)}</p>
+        </div>
+
+        <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-200/50 text-sm">
+            <div class="text-slate-500">
+                ${note.datetime
+                    ? `<span class="flex items-center gap-1">
+                         <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+                         ${formatDateTime(note.datetime)}
+                       </span>`
+                    : '<span class="text-slate-400 italic">無提醒</span>'
+                }
+            </div>
+            <div class="flex gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onclick="startEdit('${note.id}')" class="p-2 text-amber-500 hover:bg-amber-50 rounded-lg">
+                    <i data-lucide="edit-2" class="w-4 h-4"></i>
+                </button>
+                <button onclick="deleteNote('${note.id}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-lg">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        ${repeatSummary}
+    </div>`;
+}
 
         function renderNotes() {
             const container = document.getElementById('notes-container'); 
