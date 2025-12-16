@@ -17,7 +17,10 @@ function getConfig() {
  * 主入口（Trigger）
  ********************************/
 function main() {
-  if (!isWithinTimeRange()) return;
+
+
+    // 傳入當前時間，讓後續函式使用一致的時間基準
+  if (!isWithinTimeRange(new Date())) return;
 
   try {
     processNotifications();
@@ -27,12 +30,20 @@ function main() {
 }
 
 /********************************
- * 08:15 ~ 20:30 才執行
+ * 08:00 ~ 20:30 才執行
  ********************************/
-function isWithinTimeRange() {
-  const now = getTaipeiNow();
-  const m = now.getHours() * 60 + now.getMinutes();
-  return m >= 495 && m <= 1230;
+function isWithinTimeRange(now) {
+  // 使用 Utilities.formatDate 取得台北時區的小時和分鐘
+  const taipeiHour = parseInt(Utilities.formatDate(now, 'Asia/Taipei', 'H'));
+  const taipeiMinute = parseInt(Utilities.formatDate(now, 'Asia/Taipei', 'm'));
+
+  const totalMinutes = taipeiHour * 60 + taipeiMinute;
+
+  const startMinutes = 8 * 60; // 08:00
+  const endMinutes = 20 * 60 + 30; // 20:30
+
+  // 避免在深夜執行，減少不必要的 Gist API 呼叫
+  return totalMinutes >= startMinutes && totalMinutes <= endMinutes;
 }
 
 /********************************
@@ -46,38 +57,46 @@ function processNotifications() {
     throw new Error('notes 欄位不存在或不是 Array');
   }
 
-  const now = getTaipeiNow();
+  // 使用 new Date() 取得當前時間的 UTC Date 物件，這是處理時間最可靠的基準
+  const now = new Date();
   let updated = false;
 
   notes.forEach(item => {
-    if (!item.datetime) return;
-
-    /* ========= 單次提醒 ========= */
-    if (item.repeat === null) {
-      if (item.sent === true) return;
-
-      const planned = parseTaipeiTime(item.datetime);
-      if (now >= planned) {
-        send(item);
-        item.sent = true;
-        item.completionStatus = 'completed';
-        item.lastSentAt = toTaipeiISOString(now);
-        item.updatedAt = toTaipeiISOString(now);
-        updated = true;
-      }
+    // 跳過已完成的提醒 (sent=true) 或沒有設定時間的提醒
+    if (item.sent === true || !item.datetime) {
       return;
     }
 
-    /* ========= 重複提醒 ========= */
-    const planned = getPlannedSendTime(item, now);
-    if (!planned) return;
+    const planned = parseTaipeiTime(item.datetime);
 
-    if (hasAlreadySentForThisSchedule(item, planned)) return;
+    // 檢查提醒時間是否已到
+    if (now >= planned) {
+      send(item);
 
-    send(item);
-    item.lastSentAt = toTaipeiISOString(now);
-    item.updatedAt = toTaipeiISOString(now);
-    updated = true;
+      // 處理單次提醒
+      if (!item.repeat || item.repeat.type !== 'repeat') {
+        item.sent = true;
+        item.completionStatus = 'completed';
+      }
+      // 處理重複提醒
+      else {
+        const nextReminder = calculateNextReminder(item);
+        if (nextReminder) {
+          // 更新到下一次提醒時間
+          item.datetime = nextReminder;
+          // 'sent' 保持 false
+        } else {
+          // 重複已結束，標記為完成
+          item.sent = true;
+          item.completionStatus = 'completed';
+        }
+      }
+
+      // 記錄更新時間並標記為已修改
+      item.lastSentAt = toTaipeiISOString(now);
+      item.updatedAt = toTaipeiISOString(now);
+      updated = true;
+    }
   });
 
   if (updated) {
@@ -87,71 +106,71 @@ function processNotifications() {
 }
 
 /********************************
- * 是否已對「本次排程」發送過
+ * 計算下一次重複提醒的時間 (Pipedream 邏輯)
  ********************************/
-function hasAlreadySentForThisSchedule(item, plannedTime) {
-  if (!item.lastSentAt) return false;
+function calculateNextReminder(note) {
+  if (!note.repeat || note.repeat.type !== 'repeat') return null;
 
-  const lastSent = parseTaipeiTime(item.lastSentAt);
-  const updatedAt = item.updatedAt ? parseTaipeiTime(item.updatedAt) : null;
+  const { frequency, weekDays, monthDays, endDate } = note.repeat;
+  // 使用 parseTaipeiTime 從 note.datetime 建立一個 Date 物件
+  let next = parseTaipeiTime(note.datetime);
 
-  const base = updatedAt && updatedAt > plannedTime
-    ? updatedAt
-    : plannedTime;
+  if (frequency === "daily") {
+    next.setDate(next.getDate() + 1);
+  } else if (frequency === "weekly" && Array.isArray(weekDays)) {
+    const currentDay = next.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const sortedDays = [].concat(weekDays).sort((a, b) => a - b); // 使用 concat 建立副本
+    let nextDay = sortedDays.find((d) => d > currentDay);
 
-  return lastSent >= base;
-}
+    if (nextDay !== undefined) {
+      // 下次發生在同一週
+      next.setDate(next.getDate() + (nextDay - currentDay));
+    } else {
+      // 下次發生在下週，找到排程中的第一天
+      next.setDate(next.getDate() + (7 - currentDay) + sortedDays[0]);
+    }
+  } else if (frequency === "monthly" && Array.isArray(monthDays)) {
+    const currentDate = next.getDate();
+    const sortedDates = [].concat(monthDays).sort((a, b) => a - b); // 使用 concat 建立副本
+    let nextDate = sortedDates.find((d) => d > currentDate);
 
-/********************************
- * 計算本次應該發送的時間
- ********************************/
-function getPlannedSendTime(item, now) {
-  const r = item.repeat;
-  if (!r || r.type !== 'repeat') return null;
-
-  const start = parseTaipeiTime(r.startDate);
-  const end = r.endDate ? parseTaipeiTime(r.endDate) : null;
-  if (now < start) return null;
-  if (end && now > end) return null;
-
-  const baseTime = parseTaipeiTime(item.datetime);
-  if (!isWithinTimeWindow(baseTime, now, 10)) return null;
-
-  if (r.frequency === 'weekly') {
-    if (!Array.isArray(r.weekDays)) return null;
-    return r.weekDays.includes(now.getDay()) ? baseTime : null;
+    if (nextDate) {
+      // 下次發生在同一個月
+      next.setDate(nextDate);
+    } else {
+      // 下次發生在下個月。先將日期設為 1，避免因月份天數不同而出錯
+      next.setMonth(next.getMonth() + 1, 1);
+      next.setDate(sortedDates[0]);
+    }
+  } else {
+    return null; // 未知的頻率
   }
 
-  if (r.frequency === 'monthly') {
-    if (!Array.isArray(r.monthDays)) return null;
-    return r.monthDays.includes(now.getDate()) ? baseTime : null;
+  // 檢查計算出的下次日期是否超過結束日期
+  if (endDate) {
+      // 將 endDate 視為該天的最末時間
+      const end = parseTaipeiTime(endDate + 'T23:59:59');
+      if (next > end) {
+          return null; // 重複已結束
+      }
   }
 
-  return null;
+  // 使用 Utilities.formatDate 將 Date 物件格式化為台北時區的字串
+  return Utilities.formatDate(next, 'Asia/Taipei', "yyyy-MM-dd'T'HH:mm");
 }
 
 /********************************
  * 工具函式
  ********************************/
-function getTaipeiNow() {
-  return new Date(
-    new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' })
-  );
-}
-
 function parseTaipeiTime(str) {
+  // 確保傳入的字串包含時區資訊，讓 new Date() 能正確解析
   return new Date(str + '+08:00');
 }
 
 function toTaipeiISOString(d) {
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  // 使用 Utilities.formatDate 將 Date 物件格式化為台北時區的字串
+  return Utilities.formatDate(d, 'Asia/Taipei', "yyyy-MM-dd'T'HH:mm");
 }
-
-function isWithinTimeWindow(base, now, minutes) {
-  return Math.abs(now - base) <= minutes * 60 * 1000;
-}
-
 /********************************
  * LINE 發送
  ********************************/
