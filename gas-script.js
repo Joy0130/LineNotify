@@ -47,56 +47,78 @@ function isWithinTimeRange(now) {
 }
 
 /********************************
- * 核心流程
+ * 核心流程（已修正）
  ********************************/
 function processNotifications() {
   const raw = JSON.parse(getGistContent());
   const notes = raw.notes;
-
-  if (!Array.isArray(notes)) {
-    throw new Error('notes 欄位不存在或不是 Array');
-  }
-
-  // 使用 new Date() 取得當前時間的 UTC Date 物件，這是處理時間最可靠的基準
   const now = new Date();
   let updated = false;
 
+  // 只允許延遲幾分鐘內送出，超過就視為錯過（不補發）
+  const ALLOW_LATE_MINUTES = 2;
+
   notes.forEach(item => {
-    // 跳過已完成的提醒 (sent=true) 或沒有設定時間的提醒
-    if (item.sent === true || !item.datetime) {
-      return;
-    }
+    if (!item.datetime) return;
+
+    // 單次提醒如果已完成，直接跳過（避免影響既有「已發送」資料）
+    const isRepeat = item.repeat && item.repeat.type === 'repeat';
+    if (!isRepeat && item.sent === true) return;
+
+    // 安全初始化（不破壞既有資料）
+    if (!('lastPlanned' in item)) item.lastPlanned = null;
+    if (!('lastSentAt' in item)) item.lastSentAt = null;
 
     const planned = parseTaipeiTime(item.datetime);
 
-    // 檢查提醒時間是否已到
-    if (now >= planned) {
-      send(item);
+    // 已處理過這個排程點 → 永遠不補發
+    if (item.lastPlanned === item.datetime) return;
 
-      // 處理單次提醒
-      if (!item.repeat || item.repeat.type !== 'repeat') {
-        item.sent = true;
-        item.completionStatus = 'completed';
-      }
-      // 處理重複提醒
-      else {
-        const nextReminder = calculateNextReminder(item);
-        if (nextReminder) {
-          // 更新到下一次提醒時間
-          item.datetime = nextReminder;
-          // 'sent' 保持 false
-        } else {
-          // 重複已結束，標記為完成
+    // 尚未到時間
+    if (now < planned) return;
+
+    const diffMinutes = (now.getTime() - planned.getTime()) / (1000 * 60);
+
+    // ❌ 超過允許延遲 → 視為錯過，不補發
+    if (diffMinutes > ALLOW_LATE_MINUTES) {
+      item.lastPlanned = item.datetime; // 鎖住這次排程點，避免之後又被補發
+
+      if (isRepeat) {
+        // 推進到下一次（直到下一次 >= now 或結束）
+        const ok = advanceToNextOccurrence(item, now);
+        if (!ok) {
+          // 重複已結束
           item.sent = true;
           item.completionStatus = 'completed';
         }
       }
-
-      // 記錄更新時間並標記為已修改
-      item.lastSentAt = toTaipeiISOString(now);
       item.updatedAt = toTaipeiISOString(now);
       updated = true;
+      return;
     }
+
+    // ✅ 在允許延遲內 → 正常送出（只送一次）
+    send(item);
+    item.lastSentAt = toTaipeiISOString(now);
+    item.lastPlanned = item.datetime;
+
+    if (!isRepeat) {
+      // 單次提醒：維持原本行為
+      item.sent = true;
+      item.completionStatus = 'completed';
+    } else {
+      // 重複提醒：算下一次
+      const next = calculateNextReminder(item);
+      if (next) {
+        item.datetime = next;
+      } else {
+        item.sent = true;
+        item.completionStatus = 'completed';
+      }
+    }
+
+    item.updatedAt = toTaipeiISOString(now);
+    updated = true;
   });
 
   if (updated) {
@@ -104,6 +126,7 @@ function processNotifications() {
     updateGistContent(raw);
   }
 }
+
 
 /********************************
  * 計算下一次重複提醒的時間 (Pipedream 邏輯)
