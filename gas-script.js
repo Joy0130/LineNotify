@@ -47,7 +47,7 @@ function isWithinTimeRange(now) {
 }
 
 /********************************
- * 核心流程（已修正）
+ * 核心流程（已修正：解決過期仍發送問題、發送後不自動標記為 Completed）
  ********************************/
 function processNotifications() {
   const raw = JSON.parse(getGistContent());
@@ -61,11 +61,12 @@ function processNotifications() {
   notes.forEach(item => {
     if (!item.datetime) return;
 
-    // 單次提醒如果已完成，直接跳過（避免影響既有「已發送」資料）
+    // 單次提醒：如果「通知已發送」(sent=true) 且沒有被手動重置，則跳過
+    // 注意：這裡只檢查 sent，不檢查 completionStatus，實現邏輯分離
     const isRepeat = item.repeat && item.repeat.type === 'repeat';
     if (!isRepeat && item.sent === true) return;
 
-    // 安全初始化（不破壞既有資料）
+    // 安全初始化
     if (!('lastPlanned' in item)) item.lastPlanned = null;
     if (!('lastSentAt' in item)) item.lastSentAt = null;
 
@@ -77,19 +78,31 @@ function processNotifications() {
     // 尚未到時間
     if (now < planned) return;
 
+    // 檢查結束日期 (防止到截止時間後還重複提醒)
+    if (isRepeat && item.repeat.endDate) {
+      const endTimestamp = parseTaipeiTime(item.repeat.endDate + 'T23:59:59');
+      if (planned > endTimestamp) {
+        // 超過結束日期，標記通知已結束
+        item.sent = true;
+        // item.completionStatus = 'completed'; // <--- 已移除：讓使用者自己決定是否完成
+        item.updatedAt = toTaipeiISOString(now);
+        updated = true;
+        return; 
+      }
+    }
+
     const diffMinutes = (now.getTime() - planned.getTime()) / (1000 * 60);
 
     // ❌ 超過允許延遲 → 視為錯過，不補發
     if (diffMinutes > ALLOW_LATE_MINUTES) {
-      item.lastPlanned = item.datetime; // 鎖住這次排程點，避免之後又被補發
+      item.lastPlanned = item.datetime; // 鎖住這次排程點
 
       if (isRepeat) {
-        // 推進到下一次（直到下一次 >= now 或結束）
         const ok = advanceToNextOccurrence(item, now);
         if (!ok) {
           // 重複已結束
           item.sent = true;
-          item.completionStatus = 'completed';
+          // item.completionStatus = 'completed'; // <--- 已移除
         }
       }
       item.updatedAt = toTaipeiISOString(now);
@@ -97,23 +110,27 @@ function processNotifications() {
       return;
     }
 
-    // ✅ 在允許延遲內 → 正常送出（只送一次）
+    // ✅ 在允許延遲內 → 正常送出
     send(item);
     item.lastSentAt = toTaipeiISOString(now);
     item.lastPlanned = item.datetime;
 
     if (!isRepeat) {
-      // 單次提醒：維持原本行為
+      // 單次提醒
       item.sent = true;
-      item.completionStatus = 'completed';
+      // item.completionStatus = 'completed'; // <--- 已移除：這就是你要的修改！
+      
+      // 如果你希望發送後預設為 "未完成" (讓介面顯示三角形)，可以取消下面這行的註解：
+      // item.completionStatus = 'incomplete'; 
     } else {
       // 重複提醒：算下一次
       const next = calculateNextReminder(item);
       if (next) {
         item.datetime = next;
       } else {
+        // 重複結束
         item.sent = true;
-        item.completionStatus = 'completed';
+        // item.completionStatus = 'completed'; // <--- 已移除
       }
     }
 
@@ -125,6 +142,27 @@ function processNotifications() {
     raw.lastUpdated = toTaipeiISOString(now);
     updateGistContent(raw);
   }
+}
+
+// 注意：你需要確保 advanceToNextOccurrence 函式存在 (因為原程式碼中似乎漏貼了這個輔助函式)
+// 如果你的程式碼中沒有 advanceToNextOccurrence，請將上方 if (diffMinutes > ALLOW_LATE_MINUTES) 區塊內的邏輯改為簡單的 logic:
+// 或者直接把下方的 helper function 也補上以防萬一：
+
+function advanceToNextOccurrence(item, now) {
+    // 簡單遞迴嘗試推進到未來
+    let next = calculateNextReminder(item);
+    // 最多嘗試幾次避免無窮迴圈
+    let limit = 10; 
+    while (next && new Date(next + '+08:00') < now && limit > 0) {
+        item.datetime = next;
+        next = calculateNextReminder(item);
+        limit--;
+    }
+    if (next) {
+        item.datetime = next;
+        return true;
+    }
+    return false;
 }
 
 

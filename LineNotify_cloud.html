@@ -193,10 +193,20 @@
 
         <!-- 列表區塊 -->
         <div class="space-y-4">
-            <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2 px-1"><i data-lucide="calendar" class="w-5 h-5"></i> 記事列表 (<span id="note-count">0</span>)</h2>
-            <div id="notes-container" class="space-y-8"></div>
-            <div id="empty-state" class="hidden text-center py-12 bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400"><p>目前沒有任何記事，試著新增一筆吧！</p></div>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 px-1">
+            <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                <i data-lucide="calendar" class="w-5 h-5"></i> 記事列表 (<span id="note-count">0</span>)
+            </h2>
+            <div class="flex gap-2 text-xs font-bold overflow-x-auto pb-1 sm:pb-0">
+                <button onclick="scrollToCategory('重要')" class="px-3 py-1.5 rounded-full bg-rose-100 text-rose-700 hover:bg-rose-200 transition-colors whitespace-nowrap">重要</button>
+                <button onclick="scrollToCategory('工作')" class="px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap">工作</button>
+                <button onclick="scrollToCategory('私事')" class="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors whitespace-nowrap">私事</button>
+                <button onclick="scrollToCategory('其他')" class="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors whitespace-nowrap">其他</button>
+            </div>
         </div>
+
+<div id="notes-container" class="space-y-8"></div>
+<div id="empty-state" class="hidden text-center py-12 bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400"><p>目前沒有任何記事，試著新增一筆吧！</p></div>
     </main>
 
     <!-- 重複設定彈跳視窗 -->
@@ -261,7 +271,7 @@
         </div>
     </div>
 
-    <footer class="text-center py-8 text-slate-400 text-sm"><p>© 2025 LINE 提醒記事本 (Cloud 雲端版) - 由 Pipedream 提供定時服務</p></footer>
+    <footer class="text-center py-8 text-slate-400 text-sm"><p>© 2025 LINE 提醒記事本 (Cloud 雲端版)</p></footer>
 
     <script>
         let notes = [];
@@ -471,6 +481,7 @@
             document.getElementById('config-github-token').value=config.githubToken||''; 
             document.getElementById('config-gist-id').value=config.gistId||''; 
         }
+        // 儲存設定到 localStorage 並同步到雲端
         async function saveConfig() { 
             config.userId=document.getElementById('config-userId').value; 
             config.channelToken=document.getElementById('config-token').value; 
@@ -482,7 +493,7 @@
             toggleSettings(); 
         }
 
-        // --- Form Handling ---
+        // 記事表單處理函式
         async function handleFormSubmit(e) { 
             e.preventDefault(); 
             const cat = document.getElementById('note-category').value;
@@ -708,6 +719,7 @@ function createNoteCardHtml(note) {
     </div>`;
 }
 
+        // 記事列表
         function renderNotes() {
             const container = document.getElementById('notes-container'); 
             const emptyState = document.getElementById('empty-state'); 
@@ -719,10 +731,33 @@ function createNoteCardHtml(note) {
             } else {
                 emptyState.classList.add('hidden');
                 
+                // --- 修改處開始：新的排序邏輯 ---
                 const sortedNotes = [...notes].sort((a, b) => {
-                    if (a.sent === b.sent) return new Date(a.datetime || 0) - new Date(b.datetime || 0);
-                    return a.sent ? 1 : -1;
+                    // 定義權重取得函式
+                    const getWeight = (n) => {
+                        // 1. 待發送 (尚未 Sent) -> 排最前
+                        if (!n.sent) return 0;
+                        
+                        // 2. 未完成 (已 Sent 但狀態不是 completed) -> 排中間
+                        // (包含 completionStatus 為空字串或 'incomplete' 的情況)
+                        if (n.completionStatus !== 'completed') return 1;
+                        
+                        // 3. 已完成 (已 Sent 且狀態為 completed) -> 排最後
+                        return 2;
+                    };
+
+                    const weightA = getWeight(a);
+                    const weightB = getWeight(b);
+
+                    // 第一層：比較狀態權重 (小到大：待發送 -> 未完成 -> 已完成)
+                    if (weightA !== weightB) {
+                        return weightA - weightB;
+                    }
+
+                    // 第二層：狀態相同時，比較時間 (由舊到新)
+                    return new Date(a.datetime || 0) - new Date(b.datetime || 0);
                 });
+                // --- 修改處結束 ---
 
                 const categories = ['重要', '工作', '私事', '其他'];
                 const groups = { '重要': [], '工作': [], '私事': [], '其他': [] };
@@ -740,9 +775,11 @@ function createNoteCardHtml(note) {
                         else if (cat === '工作') headerColor = 'text-blue-600';
                         else if (cat === '私事') headerColor = 'text-emerald-600';
 
-                        html += `<div class="category-section">
+                        // 這裡保留了 id 設定，確保上方的快速跳轉按鈕功能正常
+                        html += `<div id="cat-${cat}" class="category-section scroll-mt-28 transition-colors duration-500 rounded-lg p-1">
                             <h3 class="text-md font-bold ${headerColor} mb-3 mt-2 flex items-center gap-2 border-b pb-2 border-slate-100">
-                                <i data-lucide="tag" class="w-4 h-4"></i> ${cat} <span class="text-xs font-normal text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">${groups[cat].length}</span>
+                                <i data-lucide="tag" class="w-4 h-4"></i> ${cat} 
+                                <span class="text-xs font-normal text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">${groups[cat].length}</span>
                             </h3>
                             <div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
                                 ${groups[cat].map(note => createNoteCardHtml(note)).join('')}
@@ -753,6 +790,24 @@ function createNoteCardHtml(note) {
                 container.innerHTML = html;
             }
             lucide.createIcons();
+        }
+
+        // --- 新增的跳轉函式 ---
+        function scrollToCategory(categoryName) {
+            const targetId = `cat-${categoryName}`;
+            const targetElement = document.getElementById(targetId);
+
+            if (targetElement) {
+                // 平滑捲動到該區塊
+                targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                
+                // (選用) 閃爍一下背景提醒使用者跳到哪了
+                targetElement.classList.add('bg-slate-50');
+                setTimeout(() => targetElement.classList.remove('bg-slate-50'), 1000);
+            } else {
+                // 如果該分類沒有筆記，顯示提示
+                showToast(`目前沒有「${categoryName}」分類的記事`, 'info');
+            }
         }
 
         // --- Utils ---
