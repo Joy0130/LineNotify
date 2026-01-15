@@ -80,8 +80,17 @@ function processNotifications() {
 
     // 檢查結束日期 (防止到截止時間後還重複提醒)
     if (isRepeat && item.repeat.endDate) {
-      const endTimestamp = parseTaipeiTime(item.repeat.endDate + 'T23:59:59');
-      if (planned > endTimestamp) {
+      // 修正：處理可能已包含時間的 endDate
+      // 如果 endDate 已經包含時間（例如 "2026-01-14T13:30"），直接使用
+      // 否則加上 "T23:59:59" 作為當天的結束時間
+      const endDateStr = item.repeat.endDate.includes('T') 
+        ? item.repeat.endDate 
+        : item.repeat.endDate + 'T23:59:59';
+      const endTimestamp = parseTaipeiTime(endDateStr);
+      
+      // 使用當前時間 now 來判斷，而不是 planned
+      // 這樣一旦當前日期超過結束日期，就立即停止發送通知
+      if (now > endTimestamp) {
         // 超過結束日期，標記通知已結束
         item.sent = true;
         // item.completionStatus = 'completed'; // <--- 已移除：讓使用者自己決定是否完成
@@ -209,8 +218,11 @@ function calculateNextReminder(note) {
 
   // 檢查計算出的下次日期是否超過結束日期
   if (endDate) {
-      // 將 endDate 視為該天的最末時間
-      const end = parseTaipeiTime(endDate + 'T23:59:59');
+      // 修正：處理可能已包含時間的 endDate
+      const endDateStr = endDate.includes('T') 
+        ? endDate 
+        : endDate + 'T23:59:59';
+      const end = parseTaipeiTime(endDateStr);
       if (next > end) {
           return null; // 重複已結束
       }
@@ -277,4 +289,66 @@ function updateGistContent(data) {
       }
     })
   });
+}
+
+/********************************
+ * 診斷和修正已過期的重複提醒
+ * 使用方法：在 Google Apps Script 中直接執行此函數
+ ********************************/
+function fixExpiredRepeats() {
+  const raw = JSON.parse(getGistContent());
+  const notes = raw.notes;
+  const now = new Date();
+  let fixedCount = 0;
+  
+  console.log(`=== 開始診斷 (當前時間: ${toTaipeiISOString(now)}) ===`);
+  
+  notes.forEach((item, index) => {
+    // 只檢查重複提醒
+    const isRepeat = item.repeat && item.repeat.type === 'repeat';
+    if (!isRepeat) return;
+    
+    // 只檢查還沒標記為已發送的
+    if (item.sent === true) return;
+    
+    // 檢查是否有結束日期
+    if (!item.repeat.endDate) {
+      console.log(`記事 #${index + 1}: "${item.content}" - 沒有結束日期`);
+      return;
+    }
+    
+    // 解析結束日期
+    const endDateStr = item.repeat.endDate.includes('T') 
+      ? item.repeat.endDate 
+      : item.repeat.endDate + 'T23:59:59';
+    const endTimestamp = parseTaipeiTime(endDateStr);
+    
+    console.log(`記事 #${index + 1}: "${item.content}"`);
+    console.log(`  - 結束時間: ${endDateStr}`);
+    console.log(`  - 當前狀態: sent=${item.sent}`);
+    console.log(`  - 當前 datetime: ${item.datetime}`);
+    
+    // 檢查是否已過期
+    if (now > endTimestamp) {
+      console.log(`  ✅ 已過期，需要修正`);
+      item.sent = true;
+      item.updatedAt = toTaipeiISOString(now);
+      fixedCount++;
+    } else {
+      console.log(`  ⏳ 尚未過期`);
+    }
+  });
+  
+  console.log(`\n=== 診斷完成 ===`);
+  console.log(`共修正 ${fixedCount} 筆記事`);
+  
+  if (fixedCount > 0) {
+    raw.lastUpdated = toTaipeiISOString(now);
+    updateGistContent(raw);
+    console.log(`已更新 Gist 內容`);
+  } else {
+    console.log(`沒有需要修正的記事`);
+  }
+  
+  return `修正了 ${fixedCount} 筆記事`;
 }
