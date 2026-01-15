@@ -56,7 +56,7 @@ function processNotifications() {
   let updated = false;
 
   // 只允許延遲幾分鐘內送出，超過就視為錯過（不補發）
-  const ALLOW_LATE_MINUTES = 2;
+  const ALLOW_LATE_MINUTES = 3;
 
   notes.forEach(item => {
     if (!item.datetime) return;
@@ -120,27 +120,35 @@ function processNotifications() {
     }
 
     // ✅ 在允許延遲內 → 正常送出
-    send(item);
-    item.lastSentAt = toTaipeiISOString(now);
-    item.lastPlanned = item.datetime;
+    const sendSuccess = send(item);
+    
+    // 只有在發送成功時才更新狀態
+    if (sendSuccess) {
+      item.lastSentAt = toTaipeiISOString(now);
+      item.lastPlanned = item.datetime;
 
-    if (!isRepeat) {
-      // 單次提醒
-      item.sent = true;
-      // item.completionStatus = 'completed'; // <--- 已移除：這就是你要的修改！
-      
-      // 如果你希望發送後預設為 "未完成" (讓介面顯示三角形)，可以取消下面這行的註解：
-      // item.completionStatus = 'incomplete'; 
-    } else {
-      // 重複提醒：算下一次
-      const next = calculateNextReminder(item);
-      if (next) {
-        item.datetime = next;
-      } else {
-        // 重複結束
+      if (!isRepeat) {
+        // 單次提醒
         item.sent = true;
-        // item.completionStatus = 'completed'; // <--- 已移除
+        // item.completionStatus = 'completed'; // <--- 已移除：這就是你要的修改！
+        
+        // 如果你希望發送後預設為 "未完成" (讓介面顯示三角形)，可以取消下面這行的註解：
+        // item.completionStatus = 'incomplete'; 
+      } else {
+        // 重複提醒：算下一次
+        const next = calculateNextReminder(item);
+        if (next) {
+          item.datetime = next;
+        } else {
+          // 重複結束
+          item.sent = true;
+          // item.completionStatus = 'completed'; // <--- 已移除
+        }
       }
+    } else {
+      // 發送失敗：鎖住這次排程點，避免重複嘗試
+      console.error(`   → 鎖定排程點，等待下次觸發時重試`);
+      item.lastPlanned = item.datetime;
     }
 
     item.updatedAt = toTaipeiISOString(now);
@@ -176,7 +184,7 @@ function advanceToNextOccurrence(item, now) {
 
 
 /********************************
- * 計算下一次重複提醒的時間 (Pipedream 邏輯)
+ * 計算下一次重複提醒的時間
  ********************************/
 function calculateNextReminder(note) {
   if (!note.repeat || note.repeat.type !== 'repeat') return null;
@@ -248,22 +256,56 @@ function toTaipeiISOString(d) {
  * LINE 發送
  ********************************/
 function send(item) {
-  const c = getConfig();
-  UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
-    method: 'post',
-    headers: {
-      Authorization: 'Bearer ' + c.LINE_CHANNEL_ACCESS_TOKEN,
-      'Content-Type': 'application/json'
-    },
-    payload: JSON.stringify({
-      to: c.LINE_USER_ID,
-      messages: [{
-        type: 'text',
-        text: `【${item.category}】\n${item.content}`
-      }]
-    })
-  });
+  try {
+    const c = getConfig();
+    const response = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'post',
+      headers: {
+        Authorization: 'Bearer ' + c.LINE_CHANNEL_ACCESS_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify({
+        to: c.LINE_USER_ID,
+        messages: [{
+          type: 'text',
+          text: `【${item.category}】\\n${item.content}`
+        }]
+      }),
+      muteHttpExceptions: true  // ← 新增：不自動拋出異常
+    });
+    
+    const statusCode = response.getResponseCode();
+    if (statusCode === 200) {
+      console.log(`✅ 成功發送通知: "${item.content}" (ID: ${item.id})`);
+      return true;  // ← 返回成功
+    } else {
+      console.error(`❌ LINE API 錯誤 ${statusCode}: ${response.getContentText()}`);
+      console.error(`   記事ID: ${item.id}, 內容: "${item.content}"`);
+      return false;  // ← 返回失敗
+    }
+  } catch (error) {
+    console.error(`❌ 發送通知時發生異常: ${error}`);
+    console.error(`   記事ID: ${item.id}, 內容: "${item.content}"`);
+    return false;  // ← 返回失敗
+  }
 }
+// function send(item) {
+//   const c = getConfig();
+//   UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+//     method: 'post',
+//     headers: {
+//       Authorization: 'Bearer ' + c.LINE_CHANNEL_ACCESS_TOKEN,
+//       'Content-Type': 'application/json'
+//     },
+//     payload: JSON.stringify({
+//       to: c.LINE_USER_ID,
+//       messages: [{
+//         type: 'text',
+//         text: `【${item.category}】\n${item.content}`
+//       }]
+//     })
+//   });
+// }
 
 /********************************
  * Gist I/O
