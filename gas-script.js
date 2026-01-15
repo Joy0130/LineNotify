@@ -268,7 +268,7 @@ function send(item) {
         to: c.LINE_USER_ID,
         messages: [{
           type: 'text',
-          text: `【${item.category}】\\n${item.content}`
+          text: `【${item.category}】\n${item.content}`
         }]
       }),
       muteHttpExceptions: true  // ← 新增：不自動拋出異常
