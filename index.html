@@ -35,11 +35,14 @@
                 </div>
             </div>
             <div class="flex gap-2">
-                <button onclick="syncNow()" class="p-2 rounded-full hover:bg-white/10 transition-colors" title="立即同步">
-                    <i data-lucide="refresh-cw" id="sync-icon" class="w-6 h-6"></i>
+                <button onclick="syncToCloud()" class="p-2 rounded-full hover:bg-white/10 transition-colors" title="上傳到雲端">
+                    <i data-lucide="upload-cloud" class="w-6 h-6"></i>
+                </button>
+                <button onclick="confirmSyncFromCloud()" class="p-2 rounded-full hover:bg-white/10 transition-colors" title="從雲端下載">
+                    <i data-lucide="download-cloud" id="sync-icon" class="w-6 h-6"></i>
                 </button>
                 <button onclick="toggleBackupPanel()" class="p-2 rounded-full hover:bg-white/10 transition-colors" title="備份與還原">
-                    <i data-lucide="download-cloud" class="w-6 h-6"></i>
+                    <i data-lucide="archive" class="w-6 h-6"></i>
                 </button>
                 <button onclick="toggleSettings()" class="p-2 rounded-full hover:bg-white/10 transition-colors" title="設定">
                     <i data-lucide="settings" class="w-6 h-6"></i>
@@ -71,7 +74,7 @@
         <div id="backup-panel" class="hidden bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 fade-in">
             <div class="flex justify-between items-start mb-4">
                 <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
-                    <i data-lucide="download-cloud" class="w-5 h-5"></i> 資料備份與還原
+                    <i data-lucide="archive" class="w-5 h-5"></i> 資料備份與還原
                 </h2>
                 <button onclick="toggleBackupPanel()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
             </div>
@@ -295,9 +298,18 @@
         });
 
         // --- Cloud Sync Functions ---
-        async function syncNow() {
+        async function confirmSyncFromCloud() {
             if (isSyncing) return;
-            await syncToCloud();
+            
+            if (!config.githubToken || !config.gistId) {
+                showToast('請先設定 GitHub Token 和 Gist ID', 'error');
+                return;
+            }
+            
+            // 確認對話框
+            if (confirm('⚠️ 從雲端下載會覆蓋本地所有資料！\n\n確定要繼續嗎？')) {
+                await syncFromCloud();
+            }
         }
 
         async function syncToCloud() {
