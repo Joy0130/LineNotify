@@ -88,9 +88,10 @@ function processNotifications() {
         : item.repeat.endDate + 'T23:59:59';
       const endTimestamp = parseTaipeiTime(endDateStr);
       
-      // 使用當前時間 now 來判斷，而不是 planned
-      // 這樣一旦當前日期超過結束日期，就立即停止發送通知
-      if (now > endTimestamp) {
+      // 使用計劃發送時間 planned 來判斷，而不是當前時間 now
+      // 這樣可以確保：即使觸發器稍微延遲，只要通知的預定時間在結束時間之前，就會正常發送
+      // 例如：如果結束時間是 10:00，計劃發送時間也是 10:00，即使觸發器在 10:01 執行，也會正常發送
+      if (planned > endTimestamp) {
         // 超過結束日期，標記通知已結束
         item.sent = true;
         // item.completionStatus = 'completed'; // <--- 已移除：讓使用者自己決定是否完成
@@ -138,9 +139,11 @@ function processNotifications() {
         // 重複提醒：算下一次
         const next = calculateNextReminder(item);
         if (next) {
+          // 有下一次：更新時間，保持 sent = false (待發送狀態)
           item.datetime = next;
+          item.sent = false; // 明確設置為 false，確保狀態正確
         } else {
-          // 重複結束
+          // 重複結束：沒有下一次發送時間了
           item.sent = true;
           // item.completionStatus = 'completed'; // <--- 已移除
         }
