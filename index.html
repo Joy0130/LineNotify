@@ -181,6 +181,7 @@
                         <option value="重要">重要</option>
                         <option value="工作">工作</option>
                         <option value="私事">私事</option>
+                        <option value="已完成">已完成</option>
                     </select>
                 </div>
 
@@ -231,7 +232,7 @@
                 <button onclick="scrollToCategory('重要')" class="px-3 py-1.5 rounded-full bg-rose-100 text-rose-700 hover:bg-rose-200 transition-colors whitespace-nowrap">重要</button>
                 <button onclick="scrollToCategory('工作')" class="px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap">工作</button>
                 <button onclick="scrollToCategory('私事')" class="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors whitespace-nowrap">私事</button>
-                <button onclick="scrollToCategory('其他')" class="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors whitespace-nowrap">其他</button>
+                <button onclick="scrollToCategory('已完成')" class="px-3 py-1.5 rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors whitespace-nowrap">已完成</button>
             </div>
         </div>
 
@@ -317,6 +318,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadConfigFromLocalStorage();
             loadNotesFromLocalStorage();
+            migrateCompletedNotes(); // 自動遷移已完成的記事
             renderNotes();
             lucide.createIcons();
             initMonthDaysGrid();
@@ -472,6 +474,7 @@
                         config.channelToken = data.config.channelToken || config.channelToken;
                     }
                     
+                    migrateCompletedNotes(); // 自動遷移已完成的記事
                     saveNotesToLocalStorage();
                     saveConfigToLocalStorage();
                     renderNotes();
@@ -527,6 +530,23 @@
             }
         }
 
+        // 自動遷移已完成的記事到「已完成」分類
+        function migrateCompletedNotes() {
+            let hasChanges = false;
+            notes = notes.map(note => {
+                if (note.completionStatus === 'completed' && note.category !== '已完成') {
+                    hasChanges = true;
+                    return { ...note, category: '已完成' };
+                }
+                return note;
+            });
+            
+            if (hasChanges) {
+                saveNotesToLocalStorage();
+                console.log('已自動將完成的記事移到「已完成」分類');
+            }
+        }
+
         function saveConfigToLocalStorage() {
             localStorage.setItem('line_note_config_cloud', JSON.stringify(config));
         }
@@ -566,7 +586,7 @@
         // 記事表單處理函式
         async function handleFormSubmit(e) { 
             e.preventDefault(); 
-            const cat = document.getElementById('note-category').value;
+            let cat = document.getElementById('note-category').value;
             const completion = document.getElementById('note-completion').value;
             const c = document.getElementById('note-content').value; 
             const d = document.getElementById('note-datetime').value; 
@@ -590,6 +610,11 @@
                     isSent = false; 
                     finalCompletion = '';
                 }
+            }
+
+            // 當記事標記為完成時，自動將分類改為「已完成」
+            if (finalCompletion === 'completed') {
+                cat = '已完成';
             }
 
             const nd = { category: cat, content: c, datetime: d, sent: isSent, completionStatus: finalCompletion, repeat: tempRepeatSettings, updatedAt: new Date().toISOString() }; 
@@ -862,11 +887,11 @@ function createNoteCardHtml(note) {
                 });
                 // --- 修改處結束 ---
 
-                const categories = ['重要', '工作', '私事', '其他'];
-                const groups = { '重要': [], '工作': [], '私事': [], '其他': [] };
+                const categories = ['重要', '工作', '私事', '已完成'];
+                const groups = { '重要': [], '工作': [], '私事': [], '已完成': [] };
 
                 sortedNotes.forEach(n => {
-                    const cat = (n.category && categories.includes(n.category)) ? n.category : '其他';
+                    const cat = (n.category && categories.includes(n.category)) ? n.category : '重要';
                     groups[cat].push(n);
                 });
 
@@ -877,6 +902,15 @@ function createNoteCardHtml(note) {
                         if (cat === '重要') headerColor = 'text-rose-600';
                         else if (cat === '工作') headerColor = 'text-blue-600';
                         else if (cat === '私事') headerColor = 'text-emerald-600';
+                        else if (cat === '已完成') headerColor = 'text-purple-600';
+
+                        // 「已完成」分類特殊排序：最新到最舊
+                        let categoryNotes = groups[cat];
+                        if (cat === '已完成') {
+                            categoryNotes = [...groups[cat]].sort((a, b) => {
+                                return new Date(b.datetime || 0) - new Date(a.datetime || 0);
+                            });
+                        }
 
                         // 這裡保留了 id 設定，確保上方的快速跳轉按鈕功能正常
                         html += `<div id="cat-${cat}" class="category-section scroll-mt-28 transition-colors duration-500 rounded-lg p-1">
@@ -885,7 +919,7 @@ function createNoteCardHtml(note) {
                                 <span class="text-xs font-normal text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">${groups[cat].length}</span>
                             </h3>
                             <div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
-                                ${groups[cat].map(note => createNoteCardHtml(note)).join('')}
+                                ${categoryNotes.map(note => createNoteCardHtml(note)).join('')}
                             </div>
                         </div>`;
                     }
