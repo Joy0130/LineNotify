@@ -1,2 +1,6 @@
 # Environment variables
 .env
+LineNotify_status_laste.html
+pipedream-worker.js
+README_pipedream.md
+SETUP.md
