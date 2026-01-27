@@ -1,6 +1,6 @@
 # Environment variables
 .env
 LineNotify_status_laste.html
-pipedream-worker.js
+pipedream-workflow.js
 README_pipedream.md
 SETUP.md

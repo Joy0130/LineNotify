@@ -1,10 +1,16 @@
 # Google Apps Script (GAS) 雲端版詳細設定指南
 
-本指南將引導您完成 **後端自動化** 的架設。完成後，您的 LINE 提醒記事本將具備 **24 小時自動發送通知** 的能力，不再依賴電腦開機。
+將引導您完成 **後端自動化** 的架設。完成後，您的 LINE 提醒記事本將具備 **24 小時自動發送通知** 的能力，發佈到github pages後可以於電腦、手機、平板等多裝置同步使用。
+
+## 前置作業
+
+- 需有 GitHub 帳號
+- 需有 Google 帳號
+- clone或下載本專案，依照下方說明做設定
 
 ## 最新版本功能說明
 
-目前的 GAS 腳本 (v1) 包含以下重要功能與改進：
+目前的 GAS 腳本 包含以下重要功能與改進：
 
 ### 🕐 智慧時間管理
 
@@ -19,7 +25,7 @@
 
 ### ✅ 完成狀態處理
 
-- **重要更新**：發送通知後 **不再自動標記為 Completed**
+- **重要更新**：發送通知後 **不再自動標記為 Completed **
 - 讓使用者可以自行決定任務是否完成
 - 單次提醒發送後會標記 `sent=true`，但 `completionStatus` 需由使用者手動設定
 
@@ -30,21 +36,22 @@
 
 ## 步驟 1：準備 GitHub Token 與 Gist ID
 
-如果您已經在前端網頁 (v22) 完成了雲端設定並成功同步，您應該已經有了這兩樣東西。如果還沒有，請先依照以下步驟取得：
+如果您已經在前端網頁完成了雲端設定並成功同步，您應該已經有了這兩樣東西。如果還沒有，請先依照以下步驟取得：
 
 ### GitHub Token
 
 1. 前往 **GitHub Settings** > **Developer settings** > **Personal access tokens (Classic)**
-2. **Note** 填寫：`LINE Reminder GAS`
+2. **Note** 選填。
 3. **重要**：勾選 `gist` (Create gists) 權限。
 4. 點擊 **Generate token** 並複製起來 (以 `ghp_` 開頭)。
 
 ### Gist ID
 
-這是您資料庫的「地址」。
+這是您資料庫的唯一 ID，用來辨識您的資料庫。
 
 - 如果您已經用前端網頁按過「同步」，可以在網頁設定中看到 Gist ID。
-- 或者前往 gist.github.com，點擊您的 `line-reminder-data.json`，網址最後一串亂碼即為 ID。
+- 或者前往 gist.github.com，點擊您的 Gist名稱，網址最後一串亂碼即為 ID。
+- **不同裝置如果使用相同 Gist ID，資料會自動同步**
 
 ## 步驟 2：建立 Google Apps Script 專案
 
@@ -52,23 +59,24 @@
 2. 點擊左上角的 **「新專案」**。
 3. 將預設的 `myFunction` 程式碼全部刪除。
 4. 將 `gas-script.js` 的內容完整複製貼上到編輯器中。
-5. 按下 `Ctrl + S` (或磁片圖示) 儲存，專案名稱可命名為 `LINENotify_Github`。
+5. 按下 `Ctrl + S` (或磁片圖示) 儲存，自行命名專案名稱。
 
 ## 步驟 3：設定環境變數 (Script Properties)
 
 為了安全起見，不將密碼直接寫在程式碼裡，而是設定在 GAS 中的環境變數裡面。
+進入Google App Script:https://script.google.com/home?hl=zh-tw
 
 1. 在 GAS 編輯器左側選單，點擊 **「專案設定」** (齒輪圖示 ⚙️)。
 2. 捲動到最下方找到 **「指令碼屬性」** (Script Properties)。
 3. 點擊 **「編輯指令碼屬性」** -> **「新增指令碼屬性」**，依序新增以下三項：
 
-| 屬性 (Property)             | 值 (Value)                | 說明                                                   |
-| --------------------------- | ------------------------- | ------------------------------------------------------ |
-| `GIST_FILENAME`             | `line-reminder-data.json` | 您的 Gist 檔案名稱（預設為 `line-reminder-data.json`） |
-| `GITHUB_TOKEN`              | `ghp_xxxx...`             | 您的 GitHub Personal Access Token                      |
-| `GIST_ID`                   | `abc123...`               | 您的 Gist ID                                           |
-| `LINE_CHANNEL_ACCESS_TOKEN` | `EyJ...`                  | 您的 LINE Channel Access Token（長字串）               |
-| `LINE_USER_ID`              | `U...`                    | 您的 LINE User ID（以 `U` 開頭的長字串）               |
+| 屬性 (Property)             | 值 (Value)              | 說明                                     |
+| --------------------------- | ----------------------- | ---------------------------------------- |
+| `GIST_FILENAME`             | `自行命名gist檔名.json` | 您的 Gist 檔案名稱                       |
+| `GITHUB_TOKEN`              | `ghp_xxxx...`           | 您的 GitHub Personal Access Token        |
+| `GIST_ID`                   | `abc123...`             | 您的 Gist ID                             |
+| `LINE_CHANNEL_ACCESS_TOKEN` | `EyJ...`                | 您的 LINE Channel Access Token（長字串） |
+| `LINE_USER_ID`              | `U...`                  | 您的 LINE User ID（以 `U` 開頭的長字串） |
 
 4. 點擊 **「儲存指令碼屬性」**。
 
@@ -88,11 +96,11 @@
    - 如果顯示執行成功且無錯誤，表示連線成功！
    - **注意**：如果當前時間不在 **08:00 ~ 20:30** 之間，腳本會自動跳過執行（這是正常行為）
    - 如果您有設定一個「幾分鐘前」的測試提醒，且在時間範圍內，您的手機應該會收到 LINE 通知
-   - **重要**：收到通知後，記事 **不會自動標記為完成**，需要您在前端網頁手動標記
+   - **重要**：收到通知後，記事 **不會自動標記為完成**，需要您在前端網頁手動標記確認此記事真的完成
 
 ## 步驟 5：設定自動化觸發器 (Triggers)
 
-這是最後一步，讓程式自動在背景跑。
+讓程式自動在背景跑。
 
 1. 在 GAS 左側選單，點擊 **「觸發條件」** (鬧鐘圖示 ⏰)。
 2. 點擊右下角的 **「新增觸發條件」** 按鈕。
@@ -101,15 +109,23 @@
    - **部署作業**：`上端`
    - **事件來源**：`時間驅動` (Time-driven)
    - **時間型觸發條件**：`分鐘計時器` (Minutes timer)
-   - **間隔**：`每 5 分鐘` (或是每 10 分鐘，視您的需求與額度而定)
+   - **間隔**：`每 1 分鐘` (或是每 3 分鐘，視您的需求與額度而定)
 4. 點擊 **「儲存」**。
+
+## 步驟 6（可選）：發佈到自己的github pages
+
+也可以選擇其他軟體發佈，例如：render等免費部署網站。
+
+1. 確保已經將專案放到github 並設定為public
+2. 到本專案中的 `settings > pages`
+3. 確認 `Build and deployment` 選擇 `Deploy from a branch`， Branch為 `main` /root
+4. 設定後，點擊Save
+5. 點擊上方GitHub Pages的連結，等待設定完成後即可點擊github pages自動生成的網址使用
 
 ## 🎉 完成！
 
 恭喜！現在您的 LINE 提醒記事本已經是 **「雲端全自動版」** 了。
 
-- **操作方式**：在電腦或手機瀏覽器開啟 `LineNotify_cloud.html`，新增或修改記事。
+- **操作方式**：在電腦或手機瀏覽器開啟 `github pages中設定的連結`，新增或修改記事。
 - **同步**：網頁會自動將資料同步到 GitHub Gist。
-- **通知**：Google Apps Script 會每 5 分鐘去 Gist 檢查一次，時間到了就發送 LINE 給您。
-
-電腦關機，通知依然準時送達！
+- **通知**：Google Apps Script 會每 1 分鐘去 Gist 檢查一次，時間到了就發送 LINE 給您。
