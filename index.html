@@ -197,7 +197,7 @@
 
                 <div class="space-y-2">
                     <label class="text-sm font-medium text-slate-600">內容</label>
-                    <textarea id="note-content" rows="3" placeholder="寫下要做的事情..." required class="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none resize-none"></textarea>
+                    <textarea id="note-content" rows="3" placeholder="寫下要做的事情..." required class="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none resize-none" oninput="autoResizeTextarea(this)"></textarea>
                 </div>
                 <div class="grid md:grid-cols-2 gap-4 items-start">
                     <div class="space-y-2">
@@ -315,6 +315,12 @@
         let config = { userId: '', channelToken: '', githubToken: '', gistId: '' };
         let tempRepeatSettings = null, lastClickedDay = null;
         let isSyncing = false;
+
+        // 自動調整 textarea 高度
+        function autoResizeTextarea(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             loadConfigFromLocalStorage();
@@ -644,7 +650,9 @@
                 document.getElementById('note-completion').value = '';
             }
 
-            document.getElementById('note-content').value = n.content; 
+            const contentTextarea = document.getElementById('note-content');
+            contentTextarea.value = n.content;
+            autoResizeTextarea(contentTextarea); // 調整高度以適應內容 
             document.getElementById('note-datetime').value = n.datetime||''; 
             tempRepeatSettings = n.repeat||null; 
             updateRepeatSummaryUI(); 
@@ -663,6 +671,11 @@
             document.getElementById('note-category').value = '重要'; 
             document.getElementById('completion-section').classList.add('hidden');
             document.getElementById('note-completion').value = '';
+            
+            // 重置 textarea 高度為預設值
+            const contentTextarea = document.getElementById('note-content');
+            contentTextarea.style.height = 'auto';
+            
             tempRepeatSettings = null; 
             updateRepeatSummaryUI(); 
             document.getElementById('form-title').innerText = '新增記事'; 
