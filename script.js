@@ -521,7 +521,7 @@ completionIcon = `<i data-lucide="triangle" class="inline w-4 h-4 text-amber-700
 </div>
 
 <div class="pr-2">
-    <p class="text-slate-800 whitespace-pre-wrap font-medium text-lg mb-3">${completionIcon}${escapeHtml(note.content)}</p>
+    <p class="text-slate-800 whitespace-pre-wrap break-all font-medium text-lg mb-3">${completionIcon}${escapeHtml(note.content)}</p>
 </div>
 
 <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-200/50 text-sm">
