@@ -197,6 +197,14 @@
             </div>
         </div>
 
+        <div class="relative px-1">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            <input type="text" id="note-search" placeholder="搜尋記事內容或分類..." oninput="handleSearchInput(this.value)" class="w-full py-2 pl-10 pr-10 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-white text-sm">
+            <button type="button" id="search-clear-btn" onclick="clearSearch()" class="hidden absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+
 <div id="notes-container" class="space-y-8"></div>
 <div id="empty-state" class="hidden text-center py-12 bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400"><p>目前沒有任何記事，試著新增一筆吧！</p></div>
     </main>

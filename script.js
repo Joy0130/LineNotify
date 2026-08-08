@@ -1,4 +1,5 @@
 let notes = [];
+let searchKeyword = '';
 let config = { userId: '', channelToken: '', githubToken: '', gistId: '' };
 let tempRepeatSettings = null, lastClickedDay = null;
 let isSyncing = false;
@@ -549,19 +550,41 @@ ${repeatSummary}
 }
 
 // 記事列表
-function renderNotes() {
-    const container = document.getElementById('notes-container'); 
-    const emptyState = document.getElementById('empty-state'); 
-    document.getElementById('note-count').innerText = notes.length;
+function handleSearchInput(value) {
+    searchKeyword = value.trim();
+    document.getElementById('search-clear-btn').classList.toggle('hidden', !searchKeyword);
+    renderNotes();
+}
 
-    if (notes.length === 0) {
+function clearSearch() {
+    searchKeyword = '';
+    document.getElementById('note-search').value = '';
+    document.getElementById('search-clear-btn').classList.add('hidden');
+    renderNotes();
+}
+
+function renderNotes() {
+    const container = document.getElementById('notes-container');
+    const emptyState = document.getElementById('empty-state');
+
+    const visibleNotes = searchKeyword
+        ? notes.filter(n => {
+            const kw = searchKeyword.toLowerCase();
+            return (n.content || '').toLowerCase().includes(kw) || (n.category || '').toLowerCase().includes(kw);
+        })
+        : notes;
+
+    document.getElementById('note-count').innerText = visibleNotes.length;
+
+    if (visibleNotes.length === 0) {
         emptyState.classList.remove('hidden');
+        emptyState.querySelector('p').innerText = searchKeyword ? `找不到符合「${searchKeyword}」的記事` : '目前沒有任何記事，試著新增一筆吧！';
         container.innerHTML = '';
     } else {
         emptyState.classList.add('hidden');
-        
+
         // --- 修改處開始：新的排序邏輯 ---
-        const sortedNotes = [...notes].sort((a, b) => {
+        const sortedNotes = [...visibleNotes].sort((a, b) => {
             // 定義權重取得函式
             const getWeight = (n) => {
                 // 1. 待發送 (尚未 Sent) -> 排最前
@@ -588,6 +611,18 @@ function renderNotes() {
         });
         // --- 修改處結束 ---
 
+        let html = '';
+
+        if (searchKeyword) {
+            // 搜尋時改為單一平鋪列表，不分組
+            html = `<div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
+                ${sortedNotes.map(note => createNoteCardHtml(note)).join('')}
+            </div>`;
+            container.innerHTML = html;
+            lucide.createIcons();
+            return;
+        }
+
         const categories = ['重要', '工作', '私事', '已完成'];
         const groups = { '重要': [], '工作': [], '私事': [], '已完成': [] };
 
@@ -596,7 +631,6 @@ function renderNotes() {
             groups[cat].push(n);
         });
 
-        let html = '';
         categories.forEach(cat => {
             if (groups[cat].length > 0) {
                 let headerColor = 'text-slate-600';
