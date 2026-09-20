@@ -35,7 +35,7 @@ function getNoteStatus(note, occurrenceTime) {
     const isRepeat = !!(note.repeat && note.repeat.type === 'repeat');
     const baseTime = parseNoteDateTime(note.datetime);
 
-    if (isRepeat && occurrenceTime && baseTime && occurrenceTime.getTime() !== baseTime.getTime()) {
+    if (isRepeat && occurrenceTime && (!baseTime || occurrenceTime.getTime() !== baseTime.getTime())) {
         return occurrenceTime < now ? NOTE_STATUS_PRESETS.sent : NOTE_STATUS_PRESETS.pending;
     }
 
@@ -66,6 +66,16 @@ function getStatusBadgeHtml(status) {
     return `<span><i data-lucide="${status.iconName}" class="inline w-3 h-3"></i> ${status.text}</span>`;
 }
 
+// 狀態篩選下拉的三個選項，對應到 getNoteStatus() 的五個 key。
+// 列表以整筆記事的狀態比對；行事曆以每一次發生的狀態比對。
+function matchesStatusFilter(filterValue, statusKey) {
+    if (!filterValue) return true;
+    if (filterValue === 'sent')    return statusKey === 'sent' || statusKey === 'justSent';
+    if (filterValue === 'pending') return statusKey === 'pending' || statusKey === 'waiting';
+    if (filterValue === 'expired') return statusKey === 'expired';
+    return true;
+}
+
 const CATEGORY_COLORS = {
     '重要':   { header: 'text-rose-600',    bar: '#f43f5e', chip: 'bg-rose-100 text-rose-700' },
     '工作':   { header: 'text-blue-600',    bar: '#3b82f6', chip: 'bg-blue-100 text-blue-700' },
@@ -75,4 +85,23 @@ const CATEGORY_COLORS = {
 
 function getCategoryColor(category) {
     return CATEGORY_COLORS[category] || CATEGORY_COLORS['重要'];
+}
+
+// 記事 id 會被插入 onclick 屬性，因此必須限制為安全字元。
+// 匯入的備份檔與雲端資料都可能帶入任意字串，於入口處正規化。
+function makeNoteId() {
+    return Date.now().toString() + Math.random().toString(36).slice(2, 8);
+}
+
+function sanitizeNoteIds(list) {
+    if (!Array.isArray(list)) return [];
+    const seen = Object.create(null);
+    return list.map(n => {
+        const note = n || {};
+        let id = String(note.id == null ? '' : note.id);
+        if (!/^[A-Za-z0-9_-]+$/.test(id) || seen[id]) id = makeNoteId();
+        while (seen[id]) id = makeNoteId();
+        seen[id] = true;
+        return id === note.id ? note : Object.assign({}, note, { id: id });
+    });
 }

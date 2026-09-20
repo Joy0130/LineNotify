@@ -165,7 +165,7 @@ async function syncFromCloud() {
             const fileContent = gist.files['line-reminder-data.json'].content;
             const data = JSON.parse(fileContent);
             
-            notes = data.notes || [];
+            notes = sanitizeNoteIds(data.notes);
             if (data.config) {
                 config.userId = data.config.userId || config.userId;
                 config.channelToken = data.config.channelToken || config.channelToken;
@@ -223,7 +223,7 @@ function saveNotesToLocalStorage() {
 function loadNotesFromLocalStorage() {
     const saved = localStorage.getItem('line_note_list_cloud');
     if (saved) {
-        notes = JSON.parse(saved);
+        notes = sanitizeNoteIds(JSON.parse(saved));
     }
 }
 
@@ -258,7 +258,7 @@ function loadConfigFromLocalStorage() {
 // --- Backup/Restore ---
 function toggleBackupPanel() { const p=document.getElementById('backup-panel'); p.classList.toggle('hidden'); if(!p.classList.contains('hidden')) document.getElementById('settings-panel').classList.add('hidden'); }
 function exportData() { const d={config,notes,exportedAt:new Date().toISOString()}; const b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=`line_note_backup_${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u); showToast('備份檔已下載','success'); }
-function importData(i) { const f=i.files[0]; if(!f)return; const r=new FileReader(); r.onload=async(e)=>{try{const d=JSON.parse(e.target.result); if(d.notes){if(confirm('確定要還原嗎？這會覆蓋現有資料')){notes=d.notes; if(d.config){config.userId=d.config.userId||''; config.channelToken=d.config.channelToken||'';} saveNotesToLocalStorage(); saveConfigToLocalStorage(); renderAll(); loadConfigToUI(); await syncToCloud(); showToast('還原成功','success'); toggleBackupPanel();}}else{alert('格式錯誤');}}catch(x){alert('讀取失敗');}i.value='';}; r.readAsText(f); }
+function importData(i) { const f=i.files[0]; if(!f)return; const r=new FileReader(); r.onload=async(e)=>{try{const d=JSON.parse(e.target.result); if(d.notes){if(confirm('確定要還原嗎？這會覆蓋現有資料')){notes=sanitizeNoteIds(d.notes); if(d.config){config.userId=d.config.userId||''; config.channelToken=d.config.channelToken||'';} saveNotesToLocalStorage(); saveConfigToLocalStorage(); renderAll(); loadConfigToUI(); await syncToCloud(); showToast('還原成功','success'); toggleBackupPanel();}}else{alert('格式錯誤');}}catch(x){alert('讀取失敗');}i.value='';}; r.readAsText(f); }
 
 // --- Config UI ---
 function toggleSettings() { const p=document.getElementById('settings-panel'); p.classList.toggle('hidden'); if(!p.classList.contains('hidden')) document.getElementById('backup-panel').classList.add('hidden'); }
@@ -502,8 +502,10 @@ function clearSearch() {
     renderAll();
 }
 
-// 列表與行事曆共用的篩選結果
-function getFilteredNotes() {
+// 列表與行事曆共用的篩選結果。
+// 行事曆傳入 { skipStatus: true }，因為它要以每一次發生的狀態自行篩選。
+function getFilteredNotes(options) {
+    const skipStatus = !!(options && options.skipStatus);
     const kw = searchKeyword.toLowerCase();
     return notes.filter(n => {
         if (kw) {
@@ -512,12 +514,7 @@ function getFilteredNotes() {
             if (!hit) return false;
         }
         if (filterCategory && (n.category || '重要') !== filterCategory) return false;
-        if (filterStatus) {
-            const key = getNoteStatus(n).key;
-            if (filterStatus === 'sent'    && key !== 'sent'    && key !== 'justSent') return false;
-            if (filterStatus === 'pending' && key !== 'pending' && key !== 'waiting')  return false;
-            if (filterStatus === 'expired' && key !== 'expired') return false;
-        }
+        if (!skipStatus && !matchesStatusFilter(filterStatus, getNoteStatus(n).key)) return false;
         return true;
     });
 }

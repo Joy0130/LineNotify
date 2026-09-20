@@ -286,6 +286,33 @@ assert('工作天模式下週六 10:00 的記事不落在區間內',
                     new Date(2026, 8, 14), new Date(2026, 8, 19)).length === 0,
   '週六記事不該被算入工作天區間');
 
+group('matchesStatusFilter');
+assertEq('空字串代表不篩選', matchesStatusFilter('', 'expired'), true);
+assertEq('sent 涵蓋 sent', matchesStatusFilter('sent', 'sent'), true);
+assertEq('sent 涵蓋 justSent', matchesStatusFilter('sent', 'justSent'), true);
+assertEq('sent 不涵蓋 pending', matchesStatusFilter('sent', 'pending'), false);
+assertEq('pending 涵蓋 pending', matchesStatusFilter('pending', 'pending'), true);
+assertEq('pending 涵蓋 waiting', matchesStatusFilter('pending', 'waiting'), true);
+assertEq('pending 不涵蓋 sent', matchesStatusFilter('pending', 'sent'), false);
+assertEq('expired 只涵蓋 expired', matchesStatusFilter('expired', 'expired'), true);
+assertEq('expired 不涵蓋 waiting', matchesStatusFilter('expired', 'waiting'), false);
+
+group('sanitizeNoteIds');
+assertEq('合法 id 原樣保留', sanitizeNoteIds([{ id: '1699123456789', content: 'a' }])[0].id, '1699123456789');
+assertEq('合法 id 不複製物件', sanitizeNoteIds([{ id: 'abc-1_2', content: 'a' }])[0].content, 'a');
+assert('含引號的 id 會被換掉', sanitizeNoteIds([{ id: "');alert(1);//" }])[0].id !== "');alert(1);//", 'id 未被正規化');
+assert('換掉的 id 只含安全字元', /^[A-Za-z0-9_-]+$/.test(sanitizeNoteIds([{ id: "');alert(1);//" }])[0].id), 'id 仍含不安全字元');
+assertEq('重複的 id 會被拆開', (() => { const r = sanitizeNoteIds([{ id: 'x' }, { id: 'x' }]); return r[0].id === r[1].id; })(), false);
+assertEq('非陣列回傳空陣列', sanitizeNoteIds(null), []);
+assertEq('空陣列回傳空陣列', sanitizeNoteIds([]), []);
+
+group('getNoteStatus — 重複記事缺 datetime');
+const repeatNoDatetime = { sent: false, datetime: '', repeat: { type: 'repeat', frequency: 'daily', startDate: '2026-01-01T09:00', endDate: '' } };
+assertEq('過去的發生時間點 → sent',
+  getNoteStatus(repeatNoDatetime, new Date(Date.now() - 86400000)).key, 'sent');
+assertEq('未來的發生時間點 → pending',
+  getNoteStatus(repeatNoDatetime, new Date(Date.now() + 86400000)).key, 'pending');
+
 const s = document.getElementById('summary');
 s.textContent = fail === 0 ? ('✅ 全部通過（' + pass + '）') : ('❌ ' + fail + ' 失敗 / ' + pass + ' 通過');
 s.style.color = fail === 0 ? '#047857' : '#be123c';

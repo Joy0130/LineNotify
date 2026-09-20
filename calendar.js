@@ -192,7 +192,7 @@ function renderCalendar() {
 
     const range = getVisibleRange();
     const dayCount = Math.round((range.end - range.start) / 86400000);
-    const filtered = getFilteredNotes();
+    const filtered = getFilteredNotes({ skipStatus: true });
     const today = new Date();
 
     // 逐日收集展開後的時間點
@@ -203,7 +203,10 @@ function renderCalendar() {
         const dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1);
         const entries = [];
         filtered.forEach(n => {
-            expandOccurrences(n, dayStart, dayEnd).forEach(t => entries.push({ note: n, time: t }));
+            expandOccurrences(n, dayStart, dayEnd).forEach(t => {
+                if (!matchesStatusFilter(filterStatus, getNoteStatus(n, t).key)) return;
+                entries.push({ note: n, time: t });
+            });
         });
         entries.sort((a, b) => a.time - b.time);
         days.push({ date: dayStart, entries: entries });
@@ -340,6 +343,7 @@ function bindCalendarGlobalEvents() {
 
     let lastIsMobile = window.innerWidth < MOBILE_BREAKPOINT;
     window.addEventListener('resize', () => {
+        closeOccurrencePopover();
         const nowMobile = window.innerWidth < MOBILE_BREAKPOINT;
         if (nowMobile === lastIsMobile) return;
         lastIsMobile = nowMobile;
