@@ -423,74 +423,11 @@ function updateRepeatSummaryUI() { const div=document.getElementById('repeat-sum
 
 // --- Rendering ---
 function createNoteCardHtml(note) {
-    // 時區安全的日期解析 (與 gas-script.js 的 parseTaipeiTime 邏輯一致)
-    const parseDateTime = (str) => {
-if (!str) return null;
-// 如果字串已包含時區信息（+ 或 Z），直接使用；否則加上 +08:00
-if (str.includes('+') || str.includes('Z')) {
-    return new Date(str);
-}
-return new Date(str + '+08:00');
-    };
-    
-    const now = new Date();
     const isRepeat = note.repeat && note.repeat.type === 'repeat';
-
-    // 使用時區安全的解析
-    const scheduledTime = parseDateTime(note.datetime);
-    const isExpired = scheduledTime && scheduledTime < now;
-
-    // 是否為 repeat 且最近一次已成功發送
-    let repeatJustSent = false;
-    if (isRepeat && note.lastSentAt) {
-const lastSent = parseDateTime(note.lastSentAt);
-if (lastSent && scheduledTime) {
-    repeatJustSent = lastSent >= scheduledTime;
-}
-    }
-
-    let cardStyle = 'bg-white border-slate-100'; 
-    let statusClass = 'bg-amber-100 text-amber-700';
-    let statusText = '<span><i data-lucide="clock" class="inline w-3 h-3"></i> 待發送</span>';
-
-    /* ========= 狀態判斷核心 ========= */
-    // 對於重複通知：只要 sent = false 且 datetime 是未來時間，就視為「待發送」
-    // 對於單次通知：sent = true 時顯示「已發送」
-    if (note.sent) {
-// sent = true：單次已發送 or 重複已結束
-cardStyle = 'bg-emerald-50 border border-emerald-200';
-statusClass = 'bg-emerald-100 text-emerald-700';
-statusText = '<span><i data-lucide="check-circle" class="inline w-3 h-3"></i> 已發送</span>';
-
-    } else if (isRepeat && repeatJustSent && !isExpired) {
-// 重複通知剛發送完，且 GAS 還沒來得及更新 datetime（極短暫的狀態）
-// 此時顯示「剛發送」提示用戶通知已送出
-cardStyle = 'bg-emerald-50 border border-emerald-200';
-statusClass = 'bg-emerald-100 text-emerald-700';
-statusText = '<span><i data-lucide="check-circle" class="inline w-3 h-3"></i> 剛發送</span>';
-
-    } else if (isExpired) {
-// 檢查是否在允許延遲時間內（GAS 每分鐘執行一次，允許 3 分鐘延遲）
-const ALLOW_DELAY_MINUTES = 3;
-const scheduledTime = new Date(note.datetime);
-const delayMinutes = (now.getTime() - scheduledTime.getTime()) / (1000 * 60);
-
-if (delayMinutes > ALLOW_DELAY_MINUTES) {
-    // ❌ 已過排程時間且超過允許延遲 → 真正過期未發
-    cardStyle = 'bg-rose-50 border border-rose-200';
-    statusClass = 'bg-rose-100 text-rose-700';
-    statusText = '過期未發';
-} else {
-    // ⏳ 已過排程時間但在允許延遲內 → 等待發送
-    cardStyle = 'bg-amber-50 border border-transparent shadow-sm';
-    statusClass = 'bg-blue-100 text-blue-700';
-    statusText = '<span><i data-lucide="send" class="inline w-3 h-3"></i> 等待發送</span>';
-}
-
-    } else {
-// ⏳ 尚未到時間
-cardStyle = 'bg-amber-50 border border-transparent shadow-sm';
-    }
+    const status = getNoteStatus(note);
+    const cardStyle = status.cardClass;
+    const statusClass = status.badgeClass;
+    const statusText = getStatusBadgeHtml(status);
 
     /* ========= UI 其他顯示 ========= */
     let repeatIcon = isRepeat
@@ -633,11 +570,7 @@ function renderNotes() {
 
         categories.forEach(cat => {
             if (groups[cat].length > 0) {
-                let headerColor = 'text-slate-600';
-                if (cat === '重要') headerColor = 'text-rose-600';
-                else if (cat === '工作') headerColor = 'text-blue-600';
-                else if (cat === '私事') headerColor = 'text-emerald-600';
-                else if (cat === '已完成') headerColor = 'text-purple-600';
+                const headerColor = getCategoryColor(cat).header;
 
                 // 「已完成」分類特殊排序：最新到最舊
                 let categoryNotes = groups[cat];

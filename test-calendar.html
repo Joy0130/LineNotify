@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>行事曆純函式測試</title>
+<style>
+body { font-family: system-ui, sans-serif; padding: 24px; max-width: 900px; margin: 0 auto; }
+h2 { font-size: 16px; margin: 20px 0 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+ul { list-style: none; padding: 0; margin: 0; }
+li { font-size: 13px; padding: 2px 0; font-family: ui-monospace, monospace; }
+#summary { position: sticky; top: 0; background: #fff; padding: 12px 0; font-size: 18px; font-weight: bold; }
+</style>
+</head>
+<body>
+<div id="summary">執行中…</div>
+<p style="font-size:13px;color:#64748b;">前提：瀏覽器時區為 UTC+8（台北）。本專案的 <code>datetime</code> 是無時區字串，一律以 +08:00 解析。</p>
+<div id="results"></div>
+
+<script src="notes-core.js"></script>
+<script src="calendar.js"></script>
+<script>
+let pass = 0, fail = 0, section = null;
+
+function group(name) {
+  const h = document.createElement('h2');
+  h.textContent = name;
+  document.getElementById('results').appendChild(h);
+  section = document.createElement('ul');
+  document.getElementById('results').appendChild(section);
+}
+
+function assert(name, cond, detail) {
+  const li = document.createElement('li');
+  li.textContent = (cond ? '✅ ' : '❌ ') + name + (cond ? '' : '  → ' + detail);
+  li.style.color = cond ? '#047857' : '#be123c';
+  section.appendChild(li);
+  cond ? pass++ : fail++;
+}
+
+function assertEq(name, actual, expected) {
+  const a = JSON.stringify(actual), e = JSON.stringify(expected);
+  assert(name, a === e, 'expected ' + e + ', got ' + a);
+}
+
+function D(str) { return parseNoteDateTime(str); }
+function iso(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+       + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+group('parseNoteDateTime');
+assert('無時區字串以 +08:00 解析', D('2026-09-21T14:30').getTime() === Date.parse('2026-09-21T14:30:00+08:00'), 'timestamp mismatch');
+assert('UTC+8 環境下 getHours 為 14', D('2026-09-21T14:30').getHours() === 14, 'got ' + D('2026-09-21T14:30').getHours() + '（執行環境不是 UTC+8）');
+assertEq('空字串回傳 null', D(''), null);
+assertEq('無效字串回傳 null', D('not-a-date'), null);
+assert('已含 Z 的字串直接解析', D('2026-09-21T06:30:00Z').getTime() === Date.parse('2026-09-21T06:30:00Z'), 'mismatch');
+
+group('getCategoryColor');
+assertEq('重要', getCategoryColor('重要').header, 'text-rose-600');
+assertEq('工作', getCategoryColor('工作').header, 'text-blue-600');
+assertEq('私事', getCategoryColor('私事').header, 'text-emerald-600');
+assertEq('已完成', getCategoryColor('已完成').header, 'text-purple-600');
+assertEq('未知分類退回重要', getCategoryColor('亂寫').header, 'text-rose-600');
+
+group('getNoteStatus');
+const future = new Date(Date.now() + 86400000);
+const past = new Date(Date.now() - 86400000);
+function isoLocal(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+       + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+assertEq('sent=true → sent',
+  getNoteStatus({ sent: true, datetime: isoLocal(past) }).key, 'sent');
+assertEq('未來時間 → pending',
+  getNoteStatus({ sent: false, datetime: isoLocal(future) }).key, 'pending');
+assertEq('過期超過 3 分鐘 → expired',
+  getNoteStatus({ sent: false, datetime: isoLocal(new Date(Date.now() - 10*60000)) }).key, 'expired');
+assertEq('過期 1 分鐘內 → waiting',
+  getNoteStatus({ sent: false, datetime: isoLocal(new Date(Date.now() - 60000)) }).key, 'waiting');
+assertEq('重複且 lastSentAt 追上 datetime → justSent',
+  getNoteStatus({ sent: false, datetime: isoLocal(future), lastSentAt: isoLocal(future),
+                  repeat: { type: 'repeat', frequency: 'daily', startDate: isoLocal(past) } }).key, 'justSent');
+assertEq('sent 的 cardClass',
+  getNoteStatus({ sent: true, datetime: isoLocal(past) }).cardClass, 'bg-emerald-50 border border-emerald-200');
+assertEq('expired 的 badgeClass',
+  getNoteStatus({ sent: false, datetime: isoLocal(new Date(Date.now() - 10*60000)) }).badgeClass, 'bg-rose-100 text-rose-700');
+assertEq('pending 的 cardClass',
+  getNoteStatus({ sent: false, datetime: isoLocal(future) }).cardClass, 'bg-amber-50 border border-transparent shadow-sm');
+
+group('getNoteStatus — 行事曆展開的時間點');
+const repeatNote = { sent: false, datetime: isoLocal(future),
+                     repeat: { type: 'repeat', frequency: 'daily', startDate: isoLocal(past) } };
+assertEq('重複記事的過去時間點 → sent',
+  getNoteStatus(repeatNote, new Date(Date.now() - 3*86400000)).key, 'sent');
+assertEq('重複記事的未來時間點 → pending',
+  getNoteStatus(repeatNote, new Date(Date.now() + 3*86400000)).key, 'pending');
+assertEq('重複記事的當前 datetime 時間點走完整邏輯',
+  getNoteStatus(repeatNote, D(repeatNote.datetime)).key, 'pending');
+
+group('getStatusBadgeHtml');
+assertEq('有 icon 的狀態包成 span',
+  getStatusBadgeHtml(NOTE_STATUS_PRESETS.sent),
+  '<span><i data-lucide="check-circle" class="inline w-3 h-3"></i> 已發送</span>');
+assertEq('expired 無 icon，回傳純文字',
+  getStatusBadgeHtml(NOTE_STATUS_PRESETS.expired), '過期未發');
+
+const s = document.getElementById('summary');
+s.textContent = fail === 0 ? ('✅ 全部通過（' + pass + '）') : ('❌ ' + fail + ' 失敗 / ' + pass + ' 通過');
+s.style.color = fail === 0 ? '#047857' : '#be123c';
+</script>
+</body>
+</html>
