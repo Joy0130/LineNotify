@@ -104,6 +104,85 @@ assertEq('有 icon 的狀態包成 span',
 assertEq('expired 無 icon，回傳純文字',
   getStatusBadgeHtml(NOTE_STATUS_PRESETS.expired), '過期未發');
 
+group('expandOccurrences');
+
+// 固定一個週一到次週一的區間：2026-09-14(一) ~ 2026-09-21(一)
+const W_START = new Date(2026, 8, 14, 0, 0, 0, 0);
+const W_END   = new Date(2026, 8, 21, 0, 0, 0, 0);
+function expandIso(note) { return expandOccurrences(note, W_START, W_END).map(iso); }
+
+assertEq('單次記事落在區間內',
+  expandIso({ datetime: '2026-09-16T14:30' }),
+  ['2026-09-16 14:30']);
+
+assertEq('單次記事落在區間外',
+  expandIso({ datetime: '2026-09-30T14:30' }), []);
+
+assertEq('無 datetime 回傳空陣列',
+  expandIso({ datetime: '' }), []);
+
+assertEq('repeat 但 type 不是 repeat，視為單次',
+  expandIso({ datetime: '2026-09-16T14:30', repeat: { type: 'none' } }),
+  ['2026-09-16 14:30']);
+
+assertEq('daily 展開整週 7 天，時分一致',
+  expandIso({ datetime: '2026-09-14T09:00',
+              repeat: { type: 'repeat', frequency: 'daily', startDate: '2026-09-01T09:00', endDate: '' } }),
+  ['2026-09-14 09:00','2026-09-15 09:00','2026-09-16 09:00','2026-09-17 09:00',
+   '2026-09-18 09:00','2026-09-19 09:00','2026-09-20 09:00']);
+
+assertEq('weekly 選週一三五',
+  expandIso({ datetime: '2026-09-14T08:15',
+              repeat: { type: 'repeat', frequency: 'weekly', weekDays: [1,3,5], startDate: '2026-09-01T08:15', endDate: '' } }),
+  ['2026-09-14 08:15','2026-09-16 08:15','2026-09-18 08:15']);
+
+assertEq('weekly 缺 weekDays 回傳空陣列',
+  expandIso({ datetime: '2026-09-14T08:15',
+              repeat: { type: 'repeat', frequency: 'weekly', startDate: '2026-09-01T08:15', endDate: '' } }), []);
+
+assertEq('monthly 選 16 日，該週含 16 日',
+  expandIso({ datetime: '2026-09-16T20:00',
+              repeat: { type: 'repeat', frequency: 'monthly', monthDays: [16], startDate: '2026-09-01T20:00', endDate: '' } }),
+  ['2026-09-16 20:00']);
+
+assertEq('monthly 選 1 日，該週不含 1 日',
+  expandIso({ datetime: '2026-10-01T20:00',
+              repeat: { type: 'repeat', frequency: 'monthly', monthDays: [1], startDate: '2026-09-01T20:00', endDate: '' } }), []);
+
+assertEq('startDate 在週三，週一週二不展開',
+  expandIso({ datetime: '2026-09-16T09:00',
+              repeat: { type: 'repeat', frequency: 'daily', startDate: '2026-09-16T09:00', endDate: '' } }),
+  ['2026-09-16 09:00','2026-09-17 09:00','2026-09-18 09:00','2026-09-19 09:00','2026-09-20 09:00']);
+
+assertEq('endDate 在週三，週四之後不展開',
+  expandIso({ datetime: '2026-09-14T09:00',
+              repeat: { type: 'repeat', frequency: 'daily', startDate: '2026-09-01T09:00', endDate: '2026-09-16T09:00' } }),
+  ['2026-09-14 09:00','2026-09-15 09:00','2026-09-16 09:00']);
+
+assertEq('endDate 不含 T，視為當日 23:59:59，該日仍展開',
+  expandIso({ datetime: '2026-09-14T09:00',
+              repeat: { type: 'repeat', frequency: 'daily', startDate: '2026-09-01T09:00', endDate: '2026-09-16' } }),
+  ['2026-09-14 09:00','2026-09-15 09:00','2026-09-16 09:00']);
+
+assertEq('endDate 為空視為無限期',
+  expandIso({ datetime: '2026-09-14T23:30',
+              repeat: { type: 'repeat', frequency: 'daily', startDate: '2026-01-01T23:30', endDate: '' } }).length, 7);
+
+assertEq('datetime 無法解析時時分退回 startDate',
+  expandIso({ datetime: '', repeat: { type: 'repeat', frequency: 'daily', startDate: '2026-09-15T07:45', endDate: '2026-09-16' } }),
+  ['2026-09-15 07:45','2026-09-16 07:45']);
+
+assertEq('startDate 與 endDate 都無效的重複記事回傳空陣列',
+  expandIso({ datetime: '2026-09-14T09:00',
+              repeat: { type: 'repeat', frequency: 'daily', startDate: 'bad', endDate: 'bad' } }),
+  ['2026-09-14 09:00','2026-09-15 09:00','2026-09-16 09:00','2026-09-17 09:00',
+   '2026-09-18 09:00','2026-09-19 09:00','2026-09-20 09:00']);
+
+assertEq('結果依時間由早到晚排序',
+  expandIso({ datetime: '2026-09-14T09:00',
+              repeat: { type: 'repeat', frequency: 'weekly', weekDays: [5,1,3], startDate: '2026-09-01T09:00', endDate: '' } }),
+  ['2026-09-14 09:00','2026-09-16 09:00','2026-09-18 09:00']);
+
 const s = document.getElementById('summary');
 s.textContent = fail === 0 ? ('✅ 全部通過（' + pass + '）') : ('❌ ' + fail + ' 失敗 / ' + pass + ' 通過');
 s.style.color = fail === 0 ? '#047857' : '#be123c';
