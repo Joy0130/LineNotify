@@ -367,10 +367,15 @@ function viewTabClass(active) {
 
 function switchView(view) {
     const isCal = (view === 'calendar');
-    document.getElementById('list-view').classList.toggle('hidden', isCal);
-    document.getElementById('calendar-view').classList.toggle('hidden', !isCal);
-    document.getElementById('tab-list').className = viewTabClass(!isCal);
-    document.getElementById('tab-calendar').className = viewTabClass(isCal);
+    const listView = document.getElementById('list-view');
+    const calView = document.getElementById('calendar-view');
+    const tabList = document.getElementById('tab-list');
+    const tabCal = document.getElementById('tab-calendar');
+    if (!listView || !calView || !tabList || !tabCal) return;
+    listView.classList.toggle('hidden', isCal);
+    calView.classList.toggle('hidden', !isCal);
+    tabList.className = viewTabClass(!isCal);
+    tabCal.className = viewTabClass(isCal);
     localStorage.setItem('calendarView', view);
     closeOccurrencePopover();
     if (isCal) renderCalendar();
