@@ -152,6 +152,35 @@ function formatCalendarTitle(range, dayCount) {
     return `${s.getFullYear()} 年 ${s.getMonth() + 1} 月 ${s.getDate()} 日 – ${e.getMonth() + 1} 月 ${e.getDate()} 日`;
 }
 
+function createOccurrenceHtml(note, occurrenceTime, layout) {
+    const status = getNoteStatus(note, occurrenceTime);
+    const cat = getCategoryColor(note.category);
+    const isRepeat = !!(note.repeat && note.repeat.type === 'repeat');
+    const hhmm = String(occurrenceTime.getHours()).padStart(2, '0') + ':'
+               + String(occurrenceTime.getMinutes()).padStart(2, '0');
+    const safeContent = escapeHtml(note.content || '');
+    const safeCategory = escapeHtml(note.category || '');
+
+    const repeatIcon = isRepeat
+        ? '<i data-lucide="refresh-cw" class="w-3 h-3 absolute right-1 bottom-1 text-slate-500"></i>'
+        : '';
+
+    return `<div class="cal-block group absolute overflow-hidden cursor-pointer ${status.cardClass}"
+        style="top:${layout.top}px; height:${layout.height}px; left:calc(${layout.leftPct}% + 2px); width:calc(${layout.widthPct}% - 4px); border-left:3px solid ${cat.bar};"
+        title="${safeContent}"
+        onclick="openOccurrencePopover('${note.id}', ${occurrenceTime.getTime()}, this)">
+        <div class="absolute top-0.5 right-0.5 flex gap-0.5 z-10 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onclick="event.stopPropagation(); startEdit('${note.id}')" title="編輯" class="w-5 h-5 flex items-center justify-center bg-white/90 rounded text-amber-500 hover:bg-white"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
+            <button onclick="event.stopPropagation(); deleteNote('${note.id}')" title="刪除" class="w-5 h-5 flex items-center justify-center bg-white/90 rounded text-rose-500 hover:bg-white"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+        </div>
+        <div class="px-1.5 py-1">
+            <div class="cal-clamp text-xs leading-snug text-slate-800 pr-11">${safeContent}</div>
+            <div class="text-[11px] text-slate-500 truncate">${hhmm}${safeCategory ? ' · ' + safeCategory : ''}</div>
+        </div>
+        ${repeatIcon}
+    </div>`;
+}
+
 function renderCalendar() {
     const view = document.getElementById('calendar-view');
     if (!view || view.classList.contains('hidden')) return;
@@ -209,7 +238,10 @@ function renderCalendar() {
     // 每日欄
     days.forEach(d => {
         const isToday = isSameDay(d.date, today);
-        body += `<div class="cal-col relative border-l border-slate-100 ${isToday ? 'bg-teal-50/40' : ''}" style="height:${colHeight}px"></div>`;
+        const layout = layoutDayColumn(d.entries.map(e => e.time), hours.startHour);
+        let blocks = '';
+        d.entries.forEach((e, i) => { blocks += createOccurrenceHtml(e.note, e.time, layout[i]); });
+        body += `<div class="cal-col relative border-l border-slate-100 ${isToday ? 'bg-teal-50/40' : ''}" style="height:${colHeight}px">${blocks}</div>`;
     });
 
     if (allOcc.length === 0) {
@@ -221,6 +253,11 @@ function renderCalendar() {
     bodyEl.innerHTML = body;
 
     lucide.createIcons();
+}
+
+// Task 7 會以真正的浮層取代這個版本
+function openOccurrencePopover(noteId, occurrenceMs, anchorEl) {
+    console.log('popover placeholder', noteId, new Date(occurrenceMs));
 }
 
 function closeOccurrencePopover() {
