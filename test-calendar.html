@@ -187,6 +187,79 @@ assertEq('結果依時間由早到晚排序',
               repeat: { type: 'repeat', frequency: 'weekly', weekDays: [5,1,3], startDate: '2026-09-01T09:00', endDate: '' } }),
   ['2026-09-14 09:00','2026-09-16 09:00','2026-09-18 09:00']);
 
+group('getWeekRange / getDayRange');
+function rangeIso(r) { return [iso(r.start), iso(r.end)]; }
+
+assertEq('傳入週三，回傳該週週一到次週一',
+  rangeIso(getWeekRange(new Date(2026, 8, 16, 13, 45))),
+  ['2026-09-14 00:00', '2026-09-21 00:00']);
+
+assertEq('傳入週一本身',
+  rangeIso(getWeekRange(new Date(2026, 8, 14, 0, 0))),
+  ['2026-09-14 00:00', '2026-09-21 00:00']);
+
+assertEq('傳入週日，回傳的是該週週一而非下週一',
+  rangeIso(getWeekRange(new Date(2026, 8, 20, 23, 59))),
+  ['2026-09-14 00:00', '2026-09-21 00:00']);
+
+assertEq('跨月邊界',
+  rangeIso(getWeekRange(new Date(2026, 8, 1, 10, 0))),
+  ['2026-08-31 00:00', '2026-09-07 00:00']);
+
+assertEq('跨年邊界',
+  rangeIso(getWeekRange(new Date(2027, 0, 1, 10, 0))),
+  ['2026-12-28 00:00', '2027-01-04 00:00']);
+
+assertEq('getDayRange 回傳當日到次日',
+  rangeIso(getDayRange(new Date(2026, 8, 16, 13, 45))),
+  ['2026-09-16 00:00', '2026-09-17 00:00']);
+
+group('computeHourRange');
+assertEq('無時間點 → 6 到 24', computeHourRange([]), { startHour: 6, endHour: 24 });
+assertEq('最早 08:00 → 起始仍為 6',
+  computeHourRange([new Date(2026, 8, 16, 8, 0)]), { startHour: 6, endHour: 24 });
+assertEq('最早 03:00 → 起始下修到 3',
+  computeHourRange([new Date(2026, 8, 16, 3, 20)]), { startHour: 3, endHour: 24 });
+assertEq('最早 00:10 → 起始下修到 0',
+  computeHourRange([new Date(2026, 8, 16, 0, 10)]), { startHour: 0, endHour: 24 });
+assertEq('同時有 02:00 與 23:30 → 2 到 24',
+  computeHourRange([new Date(2026, 8, 16, 23, 30), new Date(2026, 8, 16, 2, 0)]),
+  { startHour: 2, endHour: 24 });
+
+group('layoutDayColumn');
+function at(h, m) { return new Date(2026, 8, 16, h, m); }
+
+assertEq('單筆 09:00，startHour 6',
+  layoutDayColumn([at(9, 0)], 6),
+  [{ top: 192, height: 60, leftPct: 0, widthPct: 100 }]);
+
+assertEq('單筆 10:30 落在 10 點下方 32px',
+  layoutDayColumn([at(10, 30)], 6)[0].top, 288);
+
+assertEq('10:30 與 10:45 重疊 → 各佔一半',
+  layoutDayColumn([at(10, 30), at(10, 45)], 6).map(l => [l.leftPct, l.widthPct]),
+  [[0, 50], [50, 50]]);
+
+assertEq('09:00 與 10:00 相鄰但不重疊 → 各佔滿',
+  layoutDayColumn([at(9, 0), at(10, 0)], 6).map(l => l.widthPct),
+  [100, 100]);
+
+assertEq('三筆互相重疊 → 各佔三分之一',
+  layoutDayColumn([at(9, 0), at(9, 20), at(9, 40)], 6).map(l => Math.round(l.widthPct * 100) / 100),
+  [33.33, 33.33, 33.33]);
+
+assertEq('09:00、09:30、11:00 → 前兩筆同群，第三筆獨立',
+  layoutDayColumn([at(9, 0), at(9, 30), at(11, 0)], 6).map(l => l.widthPct),
+  [50, 50, 100]);
+
+assertEq('傳入順序顛倒時，回傳值仍對應原索引',
+  layoutDayColumn([at(10, 45), at(10, 30)], 6).map(l => l.leftPct),
+  [50, 0]);
+
+assert('23:00 的方塊不超出欄位總高',
+  layoutDayColumn([at(23, 0)], 6)[0].top + layoutDayColumn([at(23, 0)], 6)[0].height <= (24 - 6) * 64,
+  'overflow');
+
 const s = document.getElementById('summary');
 s.textContent = fail === 0 ? ('✅ 全部通過（' + pass + '）') : ('❌ ' + fail + ' 失敗 / ' + pass + ' 通過');
 s.style.color = fail === 0 ? '#047857' : '#be123c';
