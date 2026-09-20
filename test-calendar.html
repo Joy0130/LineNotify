@@ -149,6 +149,10 @@ assertEq('monthly 選 1 日，該週不含 1 日',
   expandIso({ datetime: '2026-10-01T20:00',
               repeat: { type: 'repeat', frequency: 'monthly', monthDays: [1], startDate: '2026-09-01T20:00', endDate: '' } }), []);
 
+assertEq('monthly 缺 monthDays 回傳空陣列',
+  expandIso({ datetime: '2026-09-16T20:00',
+              repeat: { type: 'repeat', frequency: 'monthly', startDate: '2026-09-01T20:00', endDate: '' } }), []);
+
 assertEq('startDate 在週三，週一週二不展開',
   expandIso({ datetime: '2026-09-16T09:00',
               repeat: { type: 'repeat', frequency: 'daily', startDate: '2026-09-16T09:00', endDate: '' } }),
@@ -172,7 +176,7 @@ assertEq('datetime 無法解析時時分退回 startDate',
   expandIso({ datetime: '', repeat: { type: 'repeat', frequency: 'daily', startDate: '2026-09-15T07:45', endDate: '2026-09-16' } }),
   ['2026-09-15 07:45','2026-09-16 07:45']);
 
-assertEq('startDate 與 endDate 都無效的重複記事回傳空陣列',
+assertEq('startDate 與 endDate 都無效時視為無限制展開',
   expandIso({ datetime: '2026-09-14T09:00',
               repeat: { type: 'repeat', frequency: 'daily', startDate: 'bad', endDate: 'bad' } }),
   ['2026-09-14 09:00','2026-09-15 09:00','2026-09-16 09:00','2026-09-17 09:00',
