@@ -68,7 +68,7 @@
 | 版面關係 | 「列表 / 行事曆」分頁切換，一次只顯示一種 |
 | 搜尋與篩選 | 兩個檢視共用同一組：搜尋框 + 分類篩選 + 狀態篩選 |
 | 無 `datetime` 的記事 | 行事曆不顯示 |
-| 時間軸範圍 | 預設 06:00–23:00；當週若有記事落在此範圍外，自動擴展到包含它 |
+| 時間軸範圍 | 預設顯示 06:00 至 24:00（06、07 … 23 共 18 列）；當週若有記事早於 06:00，起始時間自動下修到包含它 |
 | 已過去的重複次數 | 時間早於現在即視為「已發送」（綠色） |
 | 同格多筆 | 格子內垂直堆疊，格子高度自動撐開 |
 | 手機（< 768px） | 自動切換為單日視圖 |
@@ -102,7 +102,7 @@
 
 - `expandOccurrences(note, rangeStart, rangeEnd)` — 純函式。回傳 `Date[]`，為該筆記事在 `[rangeStart, rangeEnd)` 區間內的所有發生時間點。
 - `getWeekRange(anchorDate)` — 純函式。回傳該日期所屬週的週一 00:00 與次週一 00:00。
-- `computeHourRange(occurrences)` — 純函式。回傳 `{startHour, endHour}`，預設 `{6, 24}`，若有時間點小於 6 時則下修、大於等於 23 時則上修至包含。
+- `computeHourRange(occurrences)` — 純函式。回傳 `{startHour, endHour}`。`endHour` 恆為 24（已是一日上限）；`startHour` 為 `min(6, 所有時間點中最早的小時)`，無時間點時為 6。渲染的列為 `startHour` 至 `endHour - 1`。
 - `renderCalendar()` — 渲染整個行事曆區塊。
 - `createOccurrenceHtml(note, occurrenceTime)` — 產生單一記事方塊。
 - `calendarPrev()` / `calendarNext()` / `calendarToday()` — 週（或手機上為日）導覽。
@@ -162,6 +162,7 @@
 ```
 
 - CSS Grid：`grid-template-columns: 56px repeat(7, minmax(0, 1fr))`。
+- 列數由 `computeHourRange()` 決定，預設 06:00–23:00 共 18 列。
 - 外層固定高度 `max-height: 70vh`，`overflow: auto`。
 - 日期標題列 `position: sticky; top: 0`；時間軸欄 `position: sticky; left: 0`。兩者需設 `z-index`，左上角交會的空白格 z-index 最高。
 - 今天該欄加 `bg-teal-50/40` 淡色底。
@@ -238,9 +239,9 @@
 
 **`computeHourRange`**
 - 無時間點 → `{6, 24}`
-- 最早 08:00 → `{6, 24}`
+- 最早 08:00 → `{6, 24}`（不因為沒有 06、07 的記事就上修起始時間）
 - 最早 03:00 → `{3, 24}`
-- 最晚 23:30 → `endHour` 為 24
+- 最早 00:10 → `{0, 24}`
 - 同時有 02:00 與 23:30 → `{2, 24}`
 
 **`getNoteStatus`**
