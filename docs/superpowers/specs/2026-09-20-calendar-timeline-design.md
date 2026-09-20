@@ -68,10 +68,15 @@
 | 版面關係 | 「列表 / 行事曆」分頁切換，一次只顯示一種 |
 | 搜尋與篩選 | 兩個檢視共用同一組：搜尋框 + 分類篩選 + 狀態篩選 |
 | 無 `datetime` 的記事 | 行事曆不顯示 |
-| 時間軸範圍 | 預設顯示 06:00 至 24:00（06、07 … 23 共 18 列）；當週若有記事早於 06:00，起始時間自動下修到包含它 |
+| 時間軸範圍 | 預設顯示 06:00 至 24:00（06、07 … 23 共 18 小時）；當週若有記事早於 06:00，起始時間自動下修到包含它 |
+| 時間標籤格式 | 24 小時制（`09:00`、`13:00`） |
 | 已過去的重複次數 | 時間早於現在即視為「已發送」（綠色） |
-| 同格多筆 | 格子內垂直堆疊，格子高度自動撐開 |
-| 手機（< 768px） | 自動切換為單日視圖 |
+| 顯示天數 | 預設週一到週日 7 天，提供「工作天」切換為週一到週五 |
+| 版面型態 | 絕對定位時間軸（同 Google 日曆），非格子堆疊 |
+| 方塊高度 | 固定一小時高（資料無結束時間，不新增欄位） |
+| 重疊處理 | 時間重疊的記事在該日欄內左右平分寬度 |
+| 長內容 | 方塊內截斷，點擊方塊開啟詳情浮層顯示完整內容 |
+| 手機（< 768px） | 自動切換為單日視圖，沿用同一套絕對定位邏輯 |
 
 ## 架構
 
@@ -100,14 +105,29 @@
 
 #### `calendar.js`（新增）
 
-- `expandOccurrences(note, rangeStart, rangeEnd)` — 純函式。回傳 `Date[]`，為該筆記事在 `[rangeStart, rangeEnd)` 區間內的所有發生時間點。
-- `getWeekRange(anchorDate)` — 純函式。回傳該日期所屬週的週一 00:00 與次週一 00:00。
-- `computeHourRange(occurrences)` — 純函式。回傳 `{startHour, endHour}`。`endHour` 恆為 24（已是一日上限）；`startHour` 為 `min(6, 所有時間點中最早的小時)`，無時間點時為 6。渲染的列為 `startHour` 至 `endHour - 1`。
+純計算（可單獨測試）：
+
+- `expandOccurrences(note, rangeStart, rangeEnd)` — 回傳 `Date[]`，該筆記事在 `[rangeStart, rangeEnd)` 內的所有發生時間點。
+- `getWeekRange(anchorDate)` — 回傳該日期所屬週的週一 00:00 與次週一 00:00。
+- `getDayRange(anchorDate)` — 回傳該日 00:00 與次日 00:00，供手機單日視圖使用。
+- `getVisibleRange()` — 依 `calendarMode` 與 `calendarDays` 回傳實際顯示的區間：單日模式用 `getDayRange()`；7 天模式用 `getWeekRange()`；工作天模式取 `getWeekRange()` 的週一 00:00 到週六 00:00。展開、`computeHourRange()` 與渲染一律以此區間為準，週六日的記事在工作天模式下不會被算入時間範圍。
+- `computeHourRange(occurrences)` — 回傳 `{startHour, endHour}`。
+- `layoutDayColumn(occurrences, startHour)` — 回傳每個時間點的版面座標 `{top, height, leftPct, widthPct}`，含重疊分欄計算。
+
+渲染：
+
 - `renderCalendar()` — 渲染整個行事曆區塊。
-- `createOccurrenceHtml(note, occurrenceTime)` — 產生單一記事方塊。
+- `createOccurrenceHtml(note, occurrenceTime, layout)` — 產生單一記事方塊。
+- `openOccurrencePopover(noteId, occurrenceIso, anchorEl)` / `closeOccurrencePopover()` — 詳情浮層。
+
+導覽與狀態：
+
 - `calendarPrev()` / `calendarNext()` / `calendarToday()` — 週（或手機上為日）導覽。
-- `switchView(view)` — 切換列表／行事曆分頁，狀態寫入 localStorage `calendarView`。
-- 模組內狀態：`calendarAnchor`（`Date`，目前顯示的週所包含的任一日）、`calendarMode`（`'week' | 'day'`，由視窗寬度決定）。
+- `setCalendarDays(n)` — 切換 7 天 / 5 天（工作天），寫入 localStorage `calendarDays`。
+- `switchView(view)` — 切換列表／行事曆分頁，寫入 localStorage `calendarView`。
+- 模組內狀態：`calendarAnchor`（`Date`，目前顯示的週所含的任一日）、`calendarDays`（`7 | 5`）、`calendarMode`（`'week' | 'day'`，由視窗寬度決定）、`openPopoverKey`（目前開啟的浮層，`null` 表示未開啟）。
+
+常數：`HOUR_HEIGHT = 64`（每小時像素高）、`BLOCK_GAP = 4`（方塊間隙）、`MOBILE_BREAKPOINT = 768`。
 
 ### 重複展開規則
 
@@ -151,49 +171,87 @@
 ### 行事曆區塊
 
 ```
-[ ◀ ] 2026/09/21 – 09/27  [ 本週 ] [ ▶ ]
-┌──────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐
-│      │ 一21│ 二22│ 三23│ 四24│ 五25│ 六26│ 日27│  ← sticky top
-├──────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤
-│ 06:00│     │     │     │     │     │     │     │
-│ 07:00│     │ ▮記事│     │     │     │     │     │
-└──────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘
-      ↑ sticky left
+[今天] [◀] [▶]  2026 年 9 月 14 – 20 日            [ 7 天 | 工作天 ]
+┌────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│    │  14  │  15  │  16  │  17  │  18  │  19  │  20  │  ← sticky top
+│    │ 週一 │ 週二 │ 週三 │ 週四 │ 週五 │ 週六 │ 週日 │
+├────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│09:00                                                 │
+│    │      │      │      │ ▮TBC │      │      │      │
+│10:00 ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│
+│    │ ▮廠商│      │▮交件│▮回診│      │      │      │
+│11:00                                                 │
+└────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+  ↑ sticky left
 ```
 
-- CSS Grid：`grid-template-columns: 56px repeat(7, minmax(0, 1fr))`。
-- 列數由 `computeHourRange()` 決定，預設 06:00–23:00 共 18 列。
-- 外層固定高度 `max-height: 70vh`，`overflow: auto`。
-- 日期標題列 `position: sticky; top: 0`；時間軸欄 `position: sticky; left: 0`。兩者需設 `z-index`，左上角交會的空白格 z-index 最高。
-- 今天該欄加 `bg-teal-50/40` 淡色底。
-- 每個小時格最小高度 56px，內容多時自動撐高（同一小時的整列一起變高，此為 CSS Grid 的自然行為）。
-- 空狀態：該週無任何記事時，網格中央疊一行提示文字。
+採絕對定位的時間軸版面，不是格子堆疊。
+
+**外框**：`max-height: 70vh`、`overflow: auto`。日期標題列 `position: sticky; top: 0`，時間軸欄 `position: sticky; left: 0`，左上角交會的空白格 z-index 最高。
+
+**欄位**：`grid-template-columns: 52px repeat(N, minmax(0, 1fr))`，`N` 為 7 或 5（工作天）或 1（手機單日）。
+
+**每日欄**：`position: relative`，高度 `(endHour - startHour) × HOUR_HEIGHT`。格線用單一個 `repeating-linear-gradient` 畫出整點實線與半小時虛線，不產生額外 DOM 節點。今天該欄加淡色底 `bg-teal-50/40`，標題的日期數字與星期改用 teal 色。
+
+**時間軸欄**：同樣 `position: relative`，每個整點一個絕對定位的標籤，`top = (h - startHour) × HOUR_HEIGHT - 7`，靠右對齊，使標籤跨在格線上（同範例圖）。格式為 24 小時制 `09:00`。
+
+**方塊定位**：
+- `top = (小時 - startHour + 分鐘 / 60) × HOUR_HEIGHT`
+- `height = HOUR_HEIGHT - BLOCK_GAP`（固定一小時高）
+- 起點在 23:00 的方塊剛好延伸到 24:00，不會溢出。
+
+**重疊分欄**（`layoutDayColumn`）：
+1. 每個時間點視為佔用區間 `[t, t + 60 分鐘)`。
+2. 依開始時間排序，掃描式分群：與目前群組中任一區間有交集者併入同群，否則另起新群。
+3. 群內 `n` 筆，第 `i` 筆（0-based）的 `leftPct = i / n × 100`、`widthPct = 1 / n × 100`。
+
+**導覽列**：`[今天]`、`[◀]`、`[▶]`、當前日期範圍標題、右側「7 天 / 工作天」分段按鈕。
+
+**空狀態**：該週（或該日）無任何記事時，在網格上疊一行置中提示文字，格線仍照常顯示。
 
 ### 記事方塊
 
 ```
 ┌─────────────────────┐
-│▌14:30  [✎][🗑]      │  ← hover 時才出現右上角按鈕
-│▌開會討論專案進度      │
-│▌                 ↻  │  ← 重複記事才有
+│▌            [✎][🗑]│  ← hover 時才出現
+│▌廠商介紹公共系統…    │
+│▌10:00 · 工作     ↻ │  ← ↻ 僅重複記事
 └─────────────────────┘
 ```
 
-- 底色／邊框：`getNoteStatus().cardClass`
-- 左側 3px 直條：分類色
-- 第一行：時間 `HH:MM`（小字）
-- 內容：最多兩行，`overflow: hidden` + `text-overflow: ellipsis`，`title` 屬性放完整內容
-- 右下角重複圖示：`refresh-cw`，僅重複記事顯示
-- Hover 時右上角浮出編輯（amber）／刪除（rose）兩顆小按鈕，`onclick` 呼叫既有的 `startEdit(note.id)` 與 `deleteNote(note.id)`。觸控裝置上按鈕恆常顯示（沿用列表既有的 `opacity-100 sm:opacity-0 group-hover:opacity-100` 手法）。
+- 底色／邊框：`getNoteStatus(note, occurrenceTime).cardClass`，與列表卡片同源
+- 左側 3px 直條：分類色（重要 rose／工作 blue／私事 teal／已完成 purple）
+- 內容：`overflow: hidden`，`-webkit-line-clamp: 2`，`title` 屬性放完整內容（需跳脫）
+- 第二行小字：`HH:MM · 分類`
+- 右下角 `refresh-cw` 圖示：僅重複記事顯示
+- Hover 時右上角浮出編輯（amber）／刪除（rose）小按鈕，`onclick` 呼叫既有的 `startEdit(id)` 與 `deleteNote(id)`，並 `event.stopPropagation()` 以免同時觸發詳情浮層。觸控裝置上恆常顯示（沿用列表既有的 `opacity-100 sm:opacity-0 group-hover:opacity-100` 手法）
+- 整個方塊可點擊，開啟詳情浮層
+
+### 詳情浮層
+
+解決長內容在方塊中被截斷的問題。
+
+- 觸發：點擊記事方塊本體
+- 定位：貼齊方塊右側；右側空間不足則翻到左側；垂直方向夾在視窗範圍內避免溢出。寬度約 280px
+- 內容：
+  - 狀態徽章（沿用 `getNoteStatus().badgeClass` 與 `text`）
+  - 完整內容，`white-space: pre-wrap`、`word-break: break-all`；超過約 240px 高時浮層內部捲動
+  - 完整日期時間（`formatDateTime()`）
+  - 分類標籤（分類色）
+  - 重複規則摘要（重複記事才有，直接呼叫既有的 `getRepeatSummaryHtml(note.repeat)`）
+  - 編輯／刪除兩顆按鈕，呼叫既有的 `startEdit(id)` / `deleteNote(id)`；編輯會捲動到表單，因此按下後先關閉浮層
+- 關閉：點浮層外、按 Esc、點右上角 ×
+- 同時只允許開啟一個浮層
+- 行事曆重新渲染（篩選、導覽、資料變動）時一律關閉浮層
 
 ### 手機單日視圖
 
 視窗寬度 `< 768px` 時 `calendarMode = 'day'`：
 
-- 網格改為 `grid-template-columns: 56px 1fr`，只渲染一天。
-- 導覽列改為「◀ 09/22 (一) ▶」加「今天」。
-- 其餘邏輯（展開、狀態、方塊、篩選）完全共用，不另寫一套。
-- 監聽 `resize` 事件，跨越 768px 門檻時重新渲染。
+- `grid-template-columns: 52px 1fr`，只渲染一天，區間由 `getDayRange()` 決定
+- 導覽列改為「[今天] [◀] 09/16 (三) [▶]」，隱藏 7 天／工作天切換
+- 展開、版面計算、方塊、浮層、篩選邏輯完全共用，不另寫一套
+- 監聽 `resize`，跨越 768px 門檻時重新渲染
 
 ## 渲染時機
 
@@ -205,6 +263,9 @@
 - 搜尋關鍵字、分類篩選、狀態篩選變動時
 - 週／日導覽時（僅重繪行事曆）
 - 視窗寬度跨越 768px 門檻時
+- 切換 7 天 / 工作天時（僅重繪行事曆）
+
+任何一次行事曆重繪都必須先關閉詳情浮層。
 
 統一由 `renderAll()` 負責前六項。
 
@@ -214,6 +275,7 @@
 - `weekDays` / `monthDays` 缺失或為空陣列 → 該重複記事展開為空，不顯示。
 - `expandOccurrences` 的逐日走訪以區間長度為上限（一週最多 7 圈、單日 1 圈），不會有無限迴圈風險。
 - 內容一律經 `escapeHtml()` 後才放進 innerHTML，`title` 屬性同樣需跳脫。
+- 詳情浮層開啟後，若該筆記事被刪除或篩選掉，重繪時浮層一併關閉，不會留下指向不存在記事的浮層。
 
 ## 測試
 
@@ -232,10 +294,16 @@
 - `endDate` 為空 → 不限制
 - 時區：`"2026-09-21T14:30"` 解析後 `getHours()` 在 UTC+8 環境下為 14
 
-**`getWeekRange`**
+**`getWeekRange` / `getDayRange`**
 - 傳入週三 → 回傳該週週一 00:00 與次週一 00:00
 - 傳入週日 → 回傳的是該週週一（而非下週一），即週日為一週的最後一天
 - 跨月、跨年邊界
+- `getDayRange` 傳入任一時刻 → 回傳當日 00:00 與次日 00:00
+
+**`getVisibleRange`**
+- 7 天模式 → 與 `getWeekRange` 相同
+- 工作天模式 → 結束時間為該週週六 00:00，週六 10:00 的記事不落在區間內
+- 單日模式 → 與 `getDayRange` 相同
 
 **`computeHourRange`**
 - 無時間點 → `{6, 24}`
@@ -243,6 +311,15 @@
 - 最早 03:00 → `{3, 24}`
 - 最早 00:10 → `{0, 24}`
 - 同時有 02:00 與 23:30 → `{2, 24}`
+
+**`layoutDayColumn`**
+- 單筆 09:00 → `top = (9 - startHour) × 64`、`height = 60`、`leftPct = 0`、`widthPct = 100`
+- 單筆 10:30 → `top` 為 10 點位置再加 32
+- 兩筆 10:30 與 10:45（區間交集）→ 各佔 50% 寬，`leftPct` 分別為 0 與 50
+- 兩筆 09:00 與 10:00（區間相鄰但不交集）→ 各佔 100% 寬
+- 三筆互相重疊 → 各佔 33.33% 寬
+- 09:00、09:30、11:00 → 前兩筆同群各 50%，第三筆獨立 100%
+- 起點 23:00、`endHour = 24` → `top + height` 不超過欄位總高
 
 **`getNoteStatus`**
 - 五種狀態各一例，且回傳的 class 字串與現行 `createNoteCardHtml()` 產生的完全相同（此為階段一「行為不變」的保證）
@@ -253,12 +330,13 @@ UI 部分以瀏覽器實際開啟確認：週導覽、sticky 標題、hover 按�
 
 1. 抽出 `getNoteStatus()`、`getFilteredNotes()`、`parseNoteDateTime()`、`getCategoryColor()`，列表改用它們 — 行為不變
 2. 篩選器升級（分類 + 狀態下拉），列表生效
-3. `expandOccurrences()`、`getWeekRange()`、`computeHourRange()` 與 `test-calendar.html`
-4. 行事曆週視圖骨架：網格、時間軸、週導覽、sticky
-5. 記事方塊：狀態底色、分類色條、重複圖示、hover 編輯刪除
-6. 分頁切換 + `renderAll()` 串接
-7. 手機單日視圖
-8. 整體驗證
+3. 純計算函式 `expandOccurrences()`、`getWeekRange()`、`computeHourRange()`、`layoutDayColumn()` 與 `test-calendar.html`
+4. 行事曆骨架：外框、sticky 日期標題列、時間軸欄、格線、週導覽、7 天／工作天切換
+5. 記事方塊：絕對定位、狀態底色、分類色條、重複圖示、內容截斷、hover 編輯刪除
+6. 詳情浮層
+7. 分頁切換 + `renderAll()` 串接
+8. 手機單日視圖
+9. 整體驗證
 
 ## 不做的事（YAGNI）
 
