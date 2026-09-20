@@ -222,7 +222,26 @@
 
 <div id="notes-container" class="space-y-8"></div>
 <div id="empty-state" class="hidden text-center py-12 bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400"><p>目前沒有任何記事，試著新增一筆吧！</p></div>
+        <div id="calendar-view">
+            <div class="flex items-center gap-2 mb-3 flex-wrap">
+                <button onclick="calendarToday()" class="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white hover:bg-slate-50">今天</button>
+                <button onclick="calendarPrev()" aria-label="上一頁" class="w-8 h-8 flex items-center justify-center border border-slate-200 rounded-lg bg-white hover:bg-slate-50"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                <button onclick="calendarNext()" aria-label="下一頁" class="w-8 h-8 flex items-center justify-center border border-slate-200 rounded-lg bg-white hover:bg-slate-50"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                <span id="calendar-title" class="text-base font-bold text-slate-700 ml-1"></span>
+                <span class="flex-1"></span>
+                <div id="calendar-days-toggle" class="flex border border-slate-200 rounded-lg overflow-hidden">
+                    <button onclick="setCalendarDays(7)" data-days="7" class="cal-days-btn px-3 py-1.5 text-xs">7 天</button>
+                    <button onclick="setCalendarDays(5)" data-days="5" class="cal-days-btn px-3 py-1.5 text-xs">工作天</button>
+                </div>
+            </div>
+            <div id="calendar-scroll" class="bg-white rounded-xl border border-slate-200 overflow-auto" style="max-height:70vh">
+                <div id="calendar-head" class="grid sticky top-0 z-20 bg-white border-b border-slate-200"></div>
+                <div id="calendar-body" class="grid relative"></div>
+            </div>
+        </div>
     </main>
+
+    <div id="calendar-popover" class="hidden fixed z-40 w-72 bg-white rounded-xl shadow-2xl border border-slate-200"></div>
 
     <!-- 重複設定彈跳視窗 -->
     <div id="repeat-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

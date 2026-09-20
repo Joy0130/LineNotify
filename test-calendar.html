@@ -260,6 +260,32 @@ assert('23:00 的方塊不超出欄位總高',
   layoutDayColumn([at(23, 0)], 6)[0].top + layoutDayColumn([at(23, 0)], 6)[0].height <= (24 - 6) * 64,
   'overflow');
 
+group('getVisibleRange');
+function visibleIso(mode, days, anchor) {
+  const savedMode = calendarMode, savedDays = calendarDays, savedAnchor = calendarAnchor;
+  calendarMode = mode; calendarDays = days; calendarAnchor = anchor;
+  const r = getVisibleRange();
+  calendarMode = savedMode; calendarDays = savedDays; calendarAnchor = savedAnchor;
+  return [iso(r.start), iso(r.end)];
+}
+
+assertEq('7 天模式與 getWeekRange 相同',
+  visibleIso('week', 7, new Date(2026, 8, 16)),
+  ['2026-09-14 00:00', '2026-09-21 00:00']);
+
+assertEq('工作天模式結束於該週週六 00:00',
+  visibleIso('week', 5, new Date(2026, 8, 16)),
+  ['2026-09-14 00:00', '2026-09-19 00:00']);
+
+assertEq('單日模式與 getDayRange 相同',
+  visibleIso('day', 7, new Date(2026, 8, 16, 13, 45)),
+  ['2026-09-16 00:00', '2026-09-17 00:00']);
+
+assert('工作天模式下週六 10:00 的記事不落在區間內',
+  expandOccurrences({ datetime: '2026-09-19T10:00' },
+                    new Date(2026, 8, 14), new Date(2026, 8, 19)).length === 0,
+  '週六記事不該被算入工作天區間');
+
 const s = document.getElementById('summary');
 s.textContent = fail === 0 ? ('✅ 全部通過（' + pass + '）') : ('❌ ' + fail + ' 失敗 / ' + pass + ' 通過');
 s.style.color = fail === 0 ? '#047857' : '#be123c';
