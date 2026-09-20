@@ -201,7 +201,8 @@ function renderCalendar() {
     // 時間軸欄
     let body = `<div class="relative sticky left-0 z-10 bg-white" style="height:${colHeight}px">`;
     for (let h = hours.startHour; h < hours.endHour; h++) {
-        body += `<div class="absolute right-1.5 text-[11px] text-slate-400" style="top:${(h - hours.startHour) * HOUR_HEIGHT - 7}px">${String(h).padStart(2, '0')}:00</div>`;
+        const labelTop = Math.max(0, (h - hours.startHour) * HOUR_HEIGHT - 7);
+        body += `<div class="absolute right-1.5 text-[11px] text-slate-400" style="top:${labelTop}px">${String(h).padStart(2, '0')}:00</div>`;
     }
     body += '</div>';
 
