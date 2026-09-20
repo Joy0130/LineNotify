@@ -1,5 +1,7 @@
 let notes = [];
 let searchKeyword = '';
+let filterCategory = '';
+let filterStatus = '';
 let config = { userId: '', channelToken: '', githubToken: '', gistId: '' };
 let tempRepeatSettings = null, lastClickedDay = null;
 let isSyncing = false;
@@ -14,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadConfigFromLocalStorage();
     loadNotesFromLocalStorage();
     migrateCompletedNotes(); // 自動遷移已完成的記事
-    renderNotes();
+    renderAll();
     lucide.createIcons();
     initMonthDaysGrid();
     const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -172,7 +174,7 @@ async function syncFromCloud() {
             migrateCompletedNotes(); // 自動遷移已完成的記事
             saveNotesToLocalStorage();
             saveConfigToLocalStorage();
-            renderNotes();
+            renderAll();
             loadConfigToUI();
             showToast('已從雲端讀取資料', 'success');
             updateSyncStatus(true, '已同步');
@@ -256,7 +258,7 @@ function loadConfigFromLocalStorage() {
 // --- Backup/Restore ---
 function toggleBackupPanel() { const p=document.getElementById('backup-panel'); p.classList.toggle('hidden'); if(!p.classList.contains('hidden')) document.getElementById('settings-panel').classList.add('hidden'); }
 function exportData() { const d={config,notes,exportedAt:new Date().toISOString()}; const b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=`line_note_backup_${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u); showToast('備份檔已下載','success'); }
-function importData(i) { const f=i.files[0]; if(!f)return; const r=new FileReader(); r.onload=async(e)=>{try{const d=JSON.parse(e.target.result); if(d.notes){if(confirm('確定要還原嗎？這會覆蓋現有資料')){notes=d.notes; if(d.config){config.userId=d.config.userId||''; config.channelToken=d.config.channelToken||'';} saveNotesToLocalStorage(); saveConfigToLocalStorage(); renderNotes(); loadConfigToUI(); await syncToCloud(); showToast('還原成功','success'); toggleBackupPanel();}}else{alert('格式錯誤');}}catch(x){alert('讀取失敗');}i.value='';}; r.readAsText(f); }
+function importData(i) { const f=i.files[0]; if(!f)return; const r=new FileReader(); r.onload=async(e)=>{try{const d=JSON.parse(e.target.result); if(d.notes){if(confirm('確定要還原嗎？這會覆蓋現有資料')){notes=d.notes; if(d.config){config.userId=d.config.userId||''; config.channelToken=d.config.channelToken||'';} saveNotesToLocalStorage(); saveConfigToLocalStorage(); renderAll(); loadConfigToUI(); await syncToCloud(); showToast('還原成功','success'); toggleBackupPanel();}}else{alert('格式錯誤');}}catch(x){alert('讀取失敗');}i.value='';}; r.readAsText(f); }
 
 // --- Config UI ---
 function toggleSettings() { const p=document.getElementById('settings-panel'); p.classList.toggle('hidden'); if(!p.classList.contains('hidden')) document.getElementById('backup-panel').classList.add('hidden'); }
@@ -319,9 +321,9 @@ async function handleFormSubmit(e) {
     
     saveNotesToLocalStorage(); 
     await syncToCloud();
-    resetForm(); 
-    renderNotes(); 
-    showToast('已儲存','success'); 
+    resetForm();
+    renderAll();
+    showToast('已儲存','success');
 }
 
 function startEdit(id) { 
@@ -380,8 +382,8 @@ async function deleteNote(id) {
         if(document.getElementById('edit-id').value===id) resetForm(); 
         saveNotesToLocalStorage(); 
         await syncToCloud();
-        renderNotes(); 
-        showToast('已刪除'); 
+        renderAll();
+        showToast('已刪除');
     } 
 }
 
@@ -490,32 +492,60 @@ ${repeatSummary}
 function handleSearchInput(value) {
     searchKeyword = value.trim();
     document.getElementById('search-clear-btn').classList.toggle('hidden', !searchKeyword);
-    renderNotes();
+    renderAll();
 }
 
 function clearSearch() {
     searchKeyword = '';
     document.getElementById('note-search').value = '';
     document.getElementById('search-clear-btn').classList.add('hidden');
+    renderAll();
+}
+
+// 列表與行事曆共用的篩選結果
+function getFilteredNotes() {
+    const kw = searchKeyword.toLowerCase();
+    return notes.filter(n => {
+        if (kw) {
+            const hit = (n.content || '').toLowerCase().includes(kw)
+                     || (n.category || '').toLowerCase().includes(kw);
+            if (!hit) return false;
+        }
+        if (filterCategory && (n.category || '重要') !== filterCategory) return false;
+        if (filterStatus) {
+            const key = getNoteStatus(n).key;
+            if (filterStatus === 'sent'    && key !== 'sent'    && key !== 'justSent') return false;
+            if (filterStatus === 'pending' && key !== 'pending' && key !== 'waiting')  return false;
+            if (filterStatus === 'expired' && key !== 'expired') return false;
+        }
+        return true;
+    });
+}
+
+function handleFilterChange() {
+    filterCategory = document.getElementById('filter-category').value;
+    filterStatus = document.getElementById('filter-status').value;
+    renderAll();
+}
+
+// 列表與行事曆的統一重繪入口
+function renderAll() {
     renderNotes();
+    if (typeof renderCalendar === 'function') renderCalendar();
 }
 
 function renderNotes() {
     const container = document.getElementById('notes-container');
     const emptyState = document.getElementById('empty-state');
 
-    const visibleNotes = searchKeyword
-        ? notes.filter(n => {
-            const kw = searchKeyword.toLowerCase();
-            return (n.content || '').toLowerCase().includes(kw) || (n.category || '').toLowerCase().includes(kw);
-        })
-        : notes;
+    const visibleNotes = getFilteredNotes();
+    const hasFilter = !!(searchKeyword || filterCategory || filterStatus);
 
     document.getElementById('note-count').innerText = visibleNotes.length;
 
     if (visibleNotes.length === 0) {
         emptyState.classList.remove('hidden');
-        emptyState.querySelector('p').innerText = searchKeyword ? `找不到符合「${searchKeyword}」的記事` : '目前沒有任何記事，試著新增一筆吧！';
+        emptyState.querySelector('p').innerText = hasFilter ? '找不到符合目前篩選條件的記事' : '目前沒有任何記事，試著新增一筆吧！';
         container.innerHTML = '';
     } else {
         emptyState.classList.add('hidden');
@@ -550,7 +580,7 @@ function renderNotes() {
 
         let html = '';
 
-        if (searchKeyword) {
+        if (hasFilter) {
             // 搜尋時改為單一平鋪列表，不分組
             html = `<div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
                 ${sortedNotes.map(note => createNoteCardHtml(note)).join('')}
