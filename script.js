@@ -6,6 +6,32 @@ let config = { userId: '', channelToken: '', githubToken: '', gistId: '' };
 let tempRepeatSettings = null, lastClickedDay = null;
 let isSyncing = false;
 
+// --- 新增記事區塊的收合 ---
+let isFormCollapsed = false;
+
+function toggleNoteForm() {
+    setNoteFormCollapsed(!isFormCollapsed);
+}
+
+function setNoteFormCollapsed(collapsed) {
+    const form = document.getElementById('note-form');
+    const heading = document.getElementById('form-heading');
+    const btn = document.getElementById('form-toggle');
+    if (!form || !heading || !btn) return;
+
+    isFormCollapsed = !!collapsed;
+    form.classList.toggle('hidden', isFormCollapsed);
+    heading.classList.toggle('mb-4', !isFormCollapsed);
+    btn.setAttribute('aria-expanded', String(!isFormCollapsed));
+    btn.title = isFormCollapsed ? '展開' : '收合';
+
+    // lucide 會把 <i> 換成 <svg>，改 data-lucide 不會重繪，直接換掉按鈕內容
+    btn.innerHTML = `<i data-lucide="${isFormCollapsed ? 'chevron-down' : 'chevron-up'}" class="w-5 h-5"></i>`;
+    lucide.createIcons();
+
+    localStorage.setItem('noteFormCollapsed', isFormCollapsed ? '1' : '0');
+}
+
 // 自動調整 textarea 高度
 function autoResizeTextarea(textarea) {
     textarea.style.height = 'auto';
@@ -29,6 +55,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 回到頂部按鈕滾動偵測
     initBackToTopButton();
+
+    // 還原新增記事區塊的收合狀態
+    setNoteFormCollapsed(localStorage.getItem('noteFormCollapsed') === '1');
 });
 
 // 回到頂部按鈕功能
@@ -328,6 +357,8 @@ async function handleFormSubmit(e) {
 
 function startEdit(id) { 
     const n = notes.find(x=>x.id===id); if(!n)return; 
+    // 收合狀態下編輯，表單填好了卻看不見，所以先展開（會一併記住為展開狀態）
+    if (isFormCollapsed) setNoteFormCollapsed(false);
     document.getElementById('edit-id').value = n.id; 
     document.getElementById('note-category').value = n.category || '重要'; 
     
