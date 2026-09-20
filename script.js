@@ -629,6 +629,14 @@ function renderNotes() {
 
 // --- 新增的跳轉函式 ---
 function scrollToCategory(categoryName) {
+    const calView = document.getElementById('calendar-view');
+    if (calView && !calView.classList.contains('hidden')) {
+        // 行事曆模式：按鈕改為切換分類篩選（再按一次取消）
+        filterCategory = (filterCategory === categoryName) ? '' : categoryName;
+        document.getElementById('filter-category').value = filterCategory;
+        renderAll();
+        return;
+    }
     const targetId = `cat-${categoryName}`;
     const targetElement = document.getElementById(targetId);
 

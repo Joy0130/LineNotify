@@ -360,9 +360,25 @@ function updateDaysToggleUI() {
     });
 }
 
+function viewTabClass(active) {
+    return 'px-4 py-1.5 text-sm transition-colors '
+         + (active ? 'bg-teal-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50');
+}
+
+function switchView(view) {
+    const isCal = (view === 'calendar');
+    document.getElementById('list-view').classList.toggle('hidden', isCal);
+    document.getElementById('calendar-view').classList.toggle('hidden', !isCal);
+    document.getElementById('tab-list').className = viewTabClass(!isCal);
+    document.getElementById('tab-calendar').className = viewTabClass(isCal);
+    localStorage.setItem('calendarView', view);
+    closeOccurrencePopover();
+    if (isCal) renderCalendar();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     calendarDays = (localStorage.getItem('calendarDays') === '5') ? 5 : 7;
     updateDaysToggleUI();
     bindCalendarGlobalEvents();
-    renderCalendar();
+    switchView(localStorage.getItem('calendarView') === 'calendar' ? 'calendar' : 'list');
 });

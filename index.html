@@ -189,6 +189,10 @@
             <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
                 <i data-lucide="calendar" class="w-5 h-5"></i> 記事列表 (<span id="note-count">0</span>)
             </h2>
+            <div class="flex border border-slate-200 rounded-lg overflow-hidden self-start">
+                <button id="tab-list" onclick="switchView('list')" class="px-4 py-1.5 text-sm">列表</button>
+                <button id="tab-calendar" onclick="switchView('calendar')" class="px-4 py-1.5 text-sm">行事曆</button>
+            </div>
             <div class="flex gap-2 text-xs font-bold overflow-x-auto pb-1 sm:pb-0">
                 <button onclick="scrollToCategory('重要')" class="px-3 py-1.5 rounded-full bg-rose-100 text-rose-700 hover:bg-rose-200 transition-colors whitespace-nowrap">重要</button>
                 <button onclick="scrollToCategory('工作')" class="px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap">工作</button>
@@ -220,9 +224,11 @@
             </select>
         </div>
 
-<div id="notes-container" class="space-y-8"></div>
-<div id="empty-state" class="hidden text-center py-12 bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400"><p>目前沒有任何記事，試著新增一筆吧！</p></div>
-        <div id="calendar-view">
+        <div id="list-view">
+            <div id="notes-container" class="space-y-8"></div>
+            <div id="empty-state" class="hidden text-center py-12 bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400"><p>目前沒有任何記事，試著新增一筆吧！</p></div>
+        </div>
+        <div id="calendar-view" class="hidden">
             <div class="flex items-center gap-2 mb-3 flex-wrap">
                 <button onclick="calendarToday()" class="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white hover:bg-slate-50">今天</button>
                 <button onclick="calendarPrev()" aria-label="上一頁" class="w-8 h-8 flex items-center justify-center border border-slate-200 rounded-lg bg-white hover:bg-slate-50"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
