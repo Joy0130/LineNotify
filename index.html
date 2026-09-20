@@ -189,6 +189,10 @@
             <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
                 <i data-lucide="calendar" class="w-5 h-5"></i> 記事列表 (<span id="note-count">0</span>)
             </h2>
+            <div class="flex border border-slate-200 rounded-lg overflow-hidden self-start">
+                <button id="tab-list" onclick="switchView('list')" class="px-4 py-1.5 text-sm">列表</button>
+                <button id="tab-calendar" onclick="switchView('calendar')" class="px-4 py-1.5 text-sm">行事曆</button>
+            </div>
             <div class="flex gap-2 text-xs font-bold overflow-x-auto pb-1 sm:pb-0">
                 <button onclick="scrollToCategory('重要')" class="px-3 py-1.5 rounded-full bg-rose-100 text-rose-700 hover:bg-rose-200 transition-colors whitespace-nowrap">重要</button>
                 <button onclick="scrollToCategory('工作')" class="px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap">工作</button>
@@ -197,17 +201,53 @@
             </div>
         </div>
 
-        <div class="relative px-1">
-            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"></i>
-            <input type="text" id="note-search" placeholder="搜尋記事內容或分類..." oninput="handleSearchInput(this.value)" class="w-full py-2 pl-10 pr-10 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-white text-sm">
-            <button type="button" id="search-clear-btn" onclick="clearSearch()" class="hidden absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <i data-lucide="x" class="w-4 h-4"></i>
-            </button>
+        <div class="flex flex-col sm:flex-row gap-2 px-1">
+            <div class="relative flex-1">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <input type="text" id="note-search" placeholder="搜尋記事內容或分類..." oninput="handleSearchInput(this.value)" class="w-full py-2 pl-10 pr-10 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-white text-sm">
+                <button type="button" id="search-clear-btn" onclick="clearSearch()" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <select id="filter-category" onchange="handleFilterChange()" class="py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-white text-sm">
+                <option value="">所有分類</option>
+                <option value="重要">重要</option>
+                <option value="工作">工作</option>
+                <option value="私事">私事</option>
+                <option value="已完成">已完成</option>
+            </select>
+            <select id="filter-status" onchange="handleFilterChange()" class="py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-white text-sm">
+                <option value="">所有狀態</option>
+                <option value="pending">待發送</option>
+                <option value="sent">已發送</option>
+                <option value="expired">過期未發</option>
+            </select>
         </div>
 
-<div id="notes-container" class="space-y-8"></div>
-<div id="empty-state" class="hidden text-center py-12 bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400"><p>目前沒有任何記事，試著新增一筆吧！</p></div>
+        <div id="list-view">
+            <div id="notes-container" class="space-y-8"></div>
+            <div id="empty-state" class="hidden text-center py-12 bg-white rounded-xl border-2 border-dashed border-slate-200 text-slate-400"><p>目前沒有任何記事，試著新增一筆吧！</p></div>
+        </div>
+        <div id="calendar-view" class="hidden">
+            <div class="flex items-center gap-2 mb-3 flex-wrap">
+                <button onclick="calendarToday()" class="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white hover:bg-slate-50">今天</button>
+                <button onclick="calendarPrev()" aria-label="上一頁" class="w-8 h-8 flex items-center justify-center border border-slate-200 rounded-lg bg-white hover:bg-slate-50"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                <button onclick="calendarNext()" aria-label="下一頁" class="w-8 h-8 flex items-center justify-center border border-slate-200 rounded-lg bg-white hover:bg-slate-50"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                <span id="calendar-title" class="text-base font-bold text-slate-700 ml-1"></span>
+                <span class="flex-1"></span>
+                <div id="calendar-days-toggle" class="flex border border-slate-200 rounded-lg overflow-hidden">
+                    <button onclick="setCalendarDays(7)" data-days="7" class="cal-days-btn px-3 py-1.5 text-xs">7 天</button>
+                    <button onclick="setCalendarDays(5)" data-days="5" class="cal-days-btn px-3 py-1.5 text-xs">工作天</button>
+                </div>
+            </div>
+            <div id="calendar-scroll" class="bg-white rounded-xl border border-slate-200 overflow-auto" style="max-height:70vh">
+                <div id="calendar-head" class="grid sticky top-0 z-20 bg-white border-b border-slate-200"></div>
+                <div id="calendar-body" class="grid relative"></div>
+            </div>
+        </div>
     </main>
+
+    <div id="calendar-popover" class="hidden fixed z-40 w-72 bg-white rounded-xl shadow-2xl border border-slate-200"></div>
 
     <!-- 重複設定彈跳視窗 -->
     <div id="repeat-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -278,6 +318,8 @@
 
     <footer class="text-center py-8 text-slate-400 text-sm"><p>© 2025 LINE 提醒記事本 (GAS)</p></footer>
 
-    <script src="script.js?v=20260808"></script>
+    <script src="notes-core.js?v=20260920"></script>
+    <script src="script.js?v=20260920"></script>
+    <script src="calendar.js?v=20260920"></script>
 </body>
 </html>

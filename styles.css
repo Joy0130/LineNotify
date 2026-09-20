@@ -110,3 +110,20 @@
     right: 1.5rem;
   }
 }
+
+/* 行事曆格線：整點實線、半小時虛線。
+   數值必須與 calendar.js 的 HOUR_HEIGHT (64) 保持一致。 */
+.cal-col {
+    background-image:
+        repeating-linear-gradient(to bottom, #e2e8f0 0 1px, transparent 1px 64px),
+        repeating-linear-gradient(to bottom, transparent 0 32px, #f1f5f9 32px 33px, transparent 33px 64px);
+}
+
+/* 行事曆記事方塊的內容截斷 */
+.cal-clamp {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-all;
+}

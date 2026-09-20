@@ -1,5 +1,7 @@
 let notes = [];
 let searchKeyword = '';
+let filterCategory = '';
+let filterStatus = '';
 let config = { userId: '', channelToken: '', githubToken: '', gistId: '' };
 let tempRepeatSettings = null, lastClickedDay = null;
 let isSyncing = false;
@@ -14,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadConfigFromLocalStorage();
     loadNotesFromLocalStorage();
     migrateCompletedNotes(); // 自動遷移已完成的記事
-    renderNotes();
+    renderAll();
     lucide.createIcons();
     initMonthDaysGrid();
     const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -163,7 +165,7 @@ async function syncFromCloud() {
             const fileContent = gist.files['line-reminder-data.json'].content;
             const data = JSON.parse(fileContent);
             
-            notes = data.notes || [];
+            notes = sanitizeNoteIds(data.notes);
             if (data.config) {
                 config.userId = data.config.userId || config.userId;
                 config.channelToken = data.config.channelToken || config.channelToken;
@@ -172,7 +174,7 @@ async function syncFromCloud() {
             migrateCompletedNotes(); // 自動遷移已完成的記事
             saveNotesToLocalStorage();
             saveConfigToLocalStorage();
-            renderNotes();
+            renderAll();
             loadConfigToUI();
             showToast('已從雲端讀取資料', 'success');
             updateSyncStatus(true, '已同步');
@@ -221,7 +223,7 @@ function saveNotesToLocalStorage() {
 function loadNotesFromLocalStorage() {
     const saved = localStorage.getItem('line_note_list_cloud');
     if (saved) {
-        notes = JSON.parse(saved);
+        notes = sanitizeNoteIds(JSON.parse(saved));
     }
 }
 
@@ -256,7 +258,7 @@ function loadConfigFromLocalStorage() {
 // --- Backup/Restore ---
 function toggleBackupPanel() { const p=document.getElementById('backup-panel'); p.classList.toggle('hidden'); if(!p.classList.contains('hidden')) document.getElementById('settings-panel').classList.add('hidden'); }
 function exportData() { const d={config,notes,exportedAt:new Date().toISOString()}; const b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=`line_note_backup_${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u); showToast('備份檔已下載','success'); }
-function importData(i) { const f=i.files[0]; if(!f)return; const r=new FileReader(); r.onload=async(e)=>{try{const d=JSON.parse(e.target.result); if(d.notes){if(confirm('確定要還原嗎？這會覆蓋現有資料')){notes=d.notes; if(d.config){config.userId=d.config.userId||''; config.channelToken=d.config.channelToken||'';} saveNotesToLocalStorage(); saveConfigToLocalStorage(); renderNotes(); loadConfigToUI(); await syncToCloud(); showToast('還原成功','success'); toggleBackupPanel();}}else{alert('格式錯誤');}}catch(x){alert('讀取失敗');}i.value='';}; r.readAsText(f); }
+function importData(i) { const f=i.files[0]; if(!f)return; const r=new FileReader(); r.onload=async(e)=>{try{const d=JSON.parse(e.target.result); if(d.notes){if(confirm('確定要還原嗎？這會覆蓋現有資料')){notes=sanitizeNoteIds(d.notes); if(d.config){config.userId=d.config.userId||''; config.channelToken=d.config.channelToken||'';} saveNotesToLocalStorage(); saveConfigToLocalStorage(); renderAll(); loadConfigToUI(); await syncToCloud(); showToast('還原成功','success'); toggleBackupPanel();}}else{alert('格式錯誤');}}catch(x){alert('讀取失敗');}i.value='';}; r.readAsText(f); }
 
 // --- Config UI ---
 function toggleSettings() { const p=document.getElementById('settings-panel'); p.classList.toggle('hidden'); if(!p.classList.contains('hidden')) document.getElementById('backup-panel').classList.add('hidden'); }
@@ -319,9 +321,9 @@ async function handleFormSubmit(e) {
     
     saveNotesToLocalStorage(); 
     await syncToCloud();
-    resetForm(); 
-    renderNotes(); 
-    showToast('已儲存','success'); 
+    resetForm();
+    renderAll();
+    showToast('已儲存','success');
 }
 
 function startEdit(id) { 
@@ -380,8 +382,8 @@ async function deleteNote(id) {
         if(document.getElementById('edit-id').value===id) resetForm(); 
         saveNotesToLocalStorage(); 
         await syncToCloud();
-        renderNotes(); 
-        showToast('已刪除'); 
+        renderAll();
+        showToast('已刪除');
     } 
 }
 
@@ -423,74 +425,11 @@ function updateRepeatSummaryUI() { const div=document.getElementById('repeat-sum
 
 // --- Rendering ---
 function createNoteCardHtml(note) {
-    // 時區安全的日期解析 (與 gas-script.js 的 parseTaipeiTime 邏輯一致)
-    const parseDateTime = (str) => {
-if (!str) return null;
-// 如果字串已包含時區信息（+ 或 Z），直接使用；否則加上 +08:00
-if (str.includes('+') || str.includes('Z')) {
-    return new Date(str);
-}
-return new Date(str + '+08:00');
-    };
-    
-    const now = new Date();
     const isRepeat = note.repeat && note.repeat.type === 'repeat';
-
-    // 使用時區安全的解析
-    const scheduledTime = parseDateTime(note.datetime);
-    const isExpired = scheduledTime && scheduledTime < now;
-
-    // 是否為 repeat 且最近一次已成功發送
-    let repeatJustSent = false;
-    if (isRepeat && note.lastSentAt) {
-const lastSent = parseDateTime(note.lastSentAt);
-if (lastSent && scheduledTime) {
-    repeatJustSent = lastSent >= scheduledTime;
-}
-    }
-
-    let cardStyle = 'bg-white border-slate-100'; 
-    let statusClass = 'bg-amber-100 text-amber-700';
-    let statusText = '<span><i data-lucide="clock" class="inline w-3 h-3"></i> 待發送</span>';
-
-    /* ========= 狀態判斷核心 ========= */
-    // 對於重複通知：只要 sent = false 且 datetime 是未來時間，就視為「待發送」
-    // 對於單次通知：sent = true 時顯示「已發送」
-    if (note.sent) {
-// sent = true：單次已發送 or 重複已結束
-cardStyle = 'bg-emerald-50 border border-emerald-200';
-statusClass = 'bg-emerald-100 text-emerald-700';
-statusText = '<span><i data-lucide="check-circle" class="inline w-3 h-3"></i> 已發送</span>';
-
-    } else if (isRepeat && repeatJustSent && !isExpired) {
-// 重複通知剛發送完，且 GAS 還沒來得及更新 datetime（極短暫的狀態）
-// 此時顯示「剛發送」提示用戶通知已送出
-cardStyle = 'bg-emerald-50 border border-emerald-200';
-statusClass = 'bg-emerald-100 text-emerald-700';
-statusText = '<span><i data-lucide="check-circle" class="inline w-3 h-3"></i> 剛發送</span>';
-
-    } else if (isExpired) {
-// 檢查是否在允許延遲時間內（GAS 每分鐘執行一次，允許 3 分鐘延遲）
-const ALLOW_DELAY_MINUTES = 3;
-const scheduledTime = new Date(note.datetime);
-const delayMinutes = (now.getTime() - scheduledTime.getTime()) / (1000 * 60);
-
-if (delayMinutes > ALLOW_DELAY_MINUTES) {
-    // ❌ 已過排程時間且超過允許延遲 → 真正過期未發
-    cardStyle = 'bg-rose-50 border border-rose-200';
-    statusClass = 'bg-rose-100 text-rose-700';
-    statusText = '過期未發';
-} else {
-    // ⏳ 已過排程時間但在允許延遲內 → 等待發送
-    cardStyle = 'bg-amber-50 border border-transparent shadow-sm';
-    statusClass = 'bg-blue-100 text-blue-700';
-    statusText = '<span><i data-lucide="send" class="inline w-3 h-3"></i> 等待發送</span>';
-}
-
-    } else {
-// ⏳ 尚未到時間
-cardStyle = 'bg-amber-50 border border-transparent shadow-sm';
-    }
+    const status = getNoteStatus(note);
+    const cardStyle = status.cardClass;
+    const statusClass = status.badgeClass;
+    const statusText = getStatusBadgeHtml(status);
 
     /* ========= UI 其他顯示 ========= */
     let repeatIcon = isRepeat
@@ -553,32 +492,57 @@ ${repeatSummary}
 function handleSearchInput(value) {
     searchKeyword = value.trim();
     document.getElementById('search-clear-btn').classList.toggle('hidden', !searchKeyword);
-    renderNotes();
+    renderAll();
 }
 
 function clearSearch() {
     searchKeyword = '';
     document.getElementById('note-search').value = '';
     document.getElementById('search-clear-btn').classList.add('hidden');
+    renderAll();
+}
+
+// 列表與行事曆共用的篩選結果。
+// 行事曆傳入 { skipStatus: true }，因為它要以每一次發生的狀態自行篩選。
+function getFilteredNotes(options) {
+    const skipStatus = !!(options && options.skipStatus);
+    const kw = searchKeyword.toLowerCase();
+    return notes.filter(n => {
+        if (kw) {
+            const hit = (n.content || '').toLowerCase().includes(kw)
+                     || (n.category || '').toLowerCase().includes(kw);
+            if (!hit) return false;
+        }
+        if (filterCategory && (n.category || '重要') !== filterCategory) return false;
+        if (!skipStatus && !matchesStatusFilter(filterStatus, getNoteStatus(n).key)) return false;
+        return true;
+    });
+}
+
+function handleFilterChange() {
+    filterCategory = document.getElementById('filter-category').value;
+    filterStatus = document.getElementById('filter-status').value;
+    renderAll();
+}
+
+// 列表與行事曆的統一重繪入口
+function renderAll() {
     renderNotes();
+    if (typeof renderCalendar === 'function') renderCalendar();
 }
 
 function renderNotes() {
     const container = document.getElementById('notes-container');
     const emptyState = document.getElementById('empty-state');
 
-    const visibleNotes = searchKeyword
-        ? notes.filter(n => {
-            const kw = searchKeyword.toLowerCase();
-            return (n.content || '').toLowerCase().includes(kw) || (n.category || '').toLowerCase().includes(kw);
-        })
-        : notes;
+    const visibleNotes = getFilteredNotes();
+    const hasFilter = !!(searchKeyword || filterCategory || filterStatus);
 
     document.getElementById('note-count').innerText = visibleNotes.length;
 
     if (visibleNotes.length === 0) {
         emptyState.classList.remove('hidden');
-        emptyState.querySelector('p').innerText = searchKeyword ? `找不到符合「${searchKeyword}」的記事` : '目前沒有任何記事，試著新增一筆吧！';
+        emptyState.querySelector('p').innerText = hasFilter ? '找不到符合目前篩選條件的記事' : '目前沒有任何記事，試著新增一筆吧！';
         container.innerHTML = '';
     } else {
         emptyState.classList.add('hidden');
@@ -613,7 +577,7 @@ function renderNotes() {
 
         let html = '';
 
-        if (searchKeyword) {
+        if (hasFilter) {
             // 搜尋時改為單一平鋪列表，不分組
             html = `<div class="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
                 ${sortedNotes.map(note => createNoteCardHtml(note)).join('')}
@@ -633,11 +597,7 @@ function renderNotes() {
 
         categories.forEach(cat => {
             if (groups[cat].length > 0) {
-                let headerColor = 'text-slate-600';
-                if (cat === '重要') headerColor = 'text-rose-600';
-                else if (cat === '工作') headerColor = 'text-blue-600';
-                else if (cat === '私事') headerColor = 'text-emerald-600';
-                else if (cat === '已完成') headerColor = 'text-purple-600';
+                const headerColor = getCategoryColor(cat).header;
 
                 // 「已完成」分類特殊排序：最新到最舊
                 let categoryNotes = groups[cat];
@@ -666,6 +626,14 @@ function renderNotes() {
 
 // --- 新增的跳轉函式 ---
 function scrollToCategory(categoryName) {
+    const calView = document.getElementById('calendar-view');
+    if (calView && !calView.classList.contains('hidden')) {
+        // 行事曆模式：按鈕改為切換分類篩選（再按一次取消）
+        filterCategory = (filterCategory === categoryName) ? '' : categoryName;
+        document.getElementById('filter-category').value = filterCategory;
+        renderAll();
+        return;
+    }
     const targetId = `cat-${categoryName}`;
     const targetElement = document.getElementById(targetId);
 
