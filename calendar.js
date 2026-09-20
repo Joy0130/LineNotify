@@ -187,6 +187,8 @@ function renderCalendar() {
     closeOccurrencePopover();
 
     calendarMode = (window.innerWidth < MOBILE_BREAKPOINT) ? 'day' : 'week';
+    const daysToggle = document.getElementById('calendar-days-toggle');
+    if (daysToggle) daysToggle.classList.toggle('hidden', calendarMode === 'day');
 
     const range = getVisibleRange();
     const dayCount = Math.round((range.end - range.start) / 86400000);
@@ -335,6 +337,14 @@ function bindCalendarGlobalEvents() {
         if (pop && e.target instanceof Node && pop.contains(e.target)) return;
         closeOccurrencePopover();
     }, true);
+
+    let lastIsMobile = window.innerWidth < MOBILE_BREAKPOINT;
+    window.addEventListener('resize', () => {
+        const nowMobile = window.innerWidth < MOBILE_BREAKPOINT;
+        if (nowMobile === lastIsMobile) return;
+        lastIsMobile = nowMobile;
+        renderCalendar();
+    });
 }
 
 function calendarShift(deltaDays) {
