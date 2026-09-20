@@ -255,15 +255,80 @@ function renderCalendar() {
     lucide.createIcons();
 }
 
-// Task 7 會以真正的浮層取代這個版本
 function openOccurrencePopover(noteId, occurrenceMs, anchorEl) {
-    console.log('popover placeholder', noteId, new Date(occurrenceMs));
+    const note = notes.find(n => n.id === noteId);
+    const pop = document.getElementById('calendar-popover');
+    if (!note || !pop) return;
+
+    const key = noteId + '|' + occurrenceMs;
+    if (openPopoverKey === key) { closeOccurrencePopover(); return; }
+
+    const t = new Date(occurrenceMs);
+    const status = getNoteStatus(note, t);
+    const cat = getCategoryColor(note.category);
+    const isRepeat = !!(note.repeat && note.repeat.type === 'repeat');
+
+    pop.innerHTML = `
+        <div class="flex items-start justify-between gap-2 p-3 border-b border-slate-100">
+            <span class="text-xs font-bold px-2 py-1 rounded-full ${status.badgeClass}">${getStatusBadgeHtml(status)}</span>
+            <button onclick="closeOccurrencePopover()" aria-label="關閉" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>
+        <div class="p-3 space-y-2">
+            <div class="text-sm text-slate-800 whitespace-pre-wrap break-all overflow-y-auto" style="max-height:240px">${escapeHtml(note.content || '')}</div>
+            <div class="flex items-center gap-1 text-xs text-slate-500">
+                <i data-lucide="clock" class="w-3.5 h-3.5"></i> ${formatDateTime(t.toISOString())}
+            </div>
+            <div><span class="text-xs font-bold px-2 py-0.5 rounded-full ${cat.chip}">${escapeHtml(note.category || '')}</span></div>
+            ${isRepeat ? `<div class="text-xs text-slate-500 leading-relaxed border-t border-slate-100 pt-2">${getRepeatSummaryHtml(note.repeat)}</div>` : ''}
+        </div>
+        <div class="flex justify-end gap-2 px-3 py-2 bg-slate-50 rounded-b-xl border-t border-slate-100">
+            <button onclick="closeOccurrencePopover(); startEdit('${note.id}')" class="px-3 py-1.5 text-xs text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 flex items-center gap-1"><i data-lucide="edit-2" class="w-3 h-3"></i> 編輯</button>
+            <button onclick="closeOccurrencePopover(); deleteNote('${note.id}')" class="px-3 py-1.5 text-xs text-rose-600 bg-rose-50 rounded-lg hover:bg-rose-100 flex items-center gap-1"><i data-lucide="trash-2" class="w-3 h-3"></i> 刪除</button>
+        </div>`;
+
+    // 先顯示才量得到寬高
+    pop.classList.remove('hidden');
+    const r = anchorEl.getBoundingClientRect();
+    const w = pop.offsetWidth;
+    const h = pop.offsetHeight;
+
+    let left = r.right + 8;
+    if (left + w > window.innerWidth - 8) left = r.left - w - 8;
+    if (left < 8) left = 8;
+
+    let top = r.top;
+    if (top + h > window.innerHeight - 8) top = window.innerHeight - h - 8;
+    if (top < 8) top = 8;
+
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+
+    openPopoverKey = key;
+    lucide.createIcons();
 }
 
 function closeOccurrencePopover() {
     const pop = document.getElementById('calendar-popover');
     if (pop) pop.classList.add('hidden');
     openPopoverKey = null;
+}
+
+function bindCalendarGlobalEvents() {
+    // 點浮層外關閉。點記事方塊本身不關，因為它的 onclick 會改開新的浮層
+    document.addEventListener('click', (e) => {
+        if (!openPopoverKey) return;
+        const pop = document.getElementById('calendar-popover');
+        if (pop && pop.contains(e.target)) return;
+        if (e.target.closest && e.target.closest('.cal-block')) return;
+        closeOccurrencePopover();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeOccurrencePopover();
+    });
+
+    // 浮層是 fixed 定位，容器捲動後位置會失準，直接關閉
+    window.addEventListener('scroll', closeOccurrencePopover, true);
 }
 
 function calendarShift(deltaDays) {
@@ -292,5 +357,6 @@ function updateDaysToggleUI() {
 document.addEventListener('DOMContentLoaded', () => {
     calendarDays = (localStorage.getItem('calendarDays') === '5') ? 5 : 7;
     updateDaysToggleUI();
+    bindCalendarGlobalEvents();
     renderCalendar();
 });
