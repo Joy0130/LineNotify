@@ -327,8 +327,14 @@ function bindCalendarGlobalEvents() {
         if (e.key === 'Escape') closeOccurrencePopover();
     });
 
-    // 浮層是 fixed 定位，容器捲動後位置會失準，直接關閉
-    window.addEventListener('scroll', closeOccurrencePopover, true);
+    // 浮層是 fixed 定位，容器捲動後位置會失準，直接關閉。
+    // 但浮層自己的內容區可捲動（長內容），那種捲動不該關閉浮層。
+    window.addEventListener('scroll', (e) => {
+        if (!openPopoverKey) return;
+        const pop = document.getElementById('calendar-popover');
+        if (pop && e.target instanceof Node && pop.contains(e.target)) return;
+        closeOccurrencePopover();
+    }, true);
 }
 
 function calendarShift(deltaDays) {
