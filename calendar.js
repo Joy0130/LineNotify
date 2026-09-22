@@ -29,6 +29,9 @@ function expandOccurrences(note, rangeStart, rangeEnd) {
     // 時分取自 note.datetime（GAS 推進時保留時分），無法解析時退回 startDate
     const timeSource = base || parseNoteDateTime(rep.startDate);
     if (!timeSource) return [];
+
+    // base datetime 本身（第一次發送時間）單獨加入，不受 rep.startDate 限制
+    const baseInRange = base && base >= rangeStart && base < rangeEnd;
     const hh = timeSource.getHours();
     const mm = timeSource.getMinutes();
 
@@ -45,7 +48,7 @@ function expandOccurrences(note, rangeStart, rangeEnd) {
             if (exclusiveEnd < to) to = exclusiveEnd;
         }
     }
-    if (from >= to) return [];
+    if (from >= to) return baseInRange ? [base] : [];
 
     const out = [];
     const dayCount = Math.ceil((rangeEnd - rangeStart) / 86400000) + 1;
@@ -64,8 +67,13 @@ function expandOccurrences(note, rangeStart, rangeEnd) {
         if (!match) continue;
 
         const occ = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hh, mm, 0, 0);
+        // 若與 base 時間完全相同則跳過（base 已單獨加入，避免重複）
+        if (base && occ.getTime() === base.getTime()) continue;
         if (occ >= from && occ < to && occ >= rangeStart && occ < rangeEnd) out.push(occ);
     }
+
+    // 將 base datetime 本身加入（不受 rep.startDate 約束）
+    if (baseInRange) out.push(base);
 
     out.sort((a, b) => a - b);
     return out;
