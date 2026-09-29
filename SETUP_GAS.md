@@ -68,11 +68,11 @@
 
 1. 在 GAS 編輯器左側選單，點擊 **「專案設定」** (齒輪圖示 ⚙️)。
 2. 捲動到最下方找到 **「指令碼屬性」** (Script Properties)。
-3. 點擊 **「編輯指令碼屬性」** -> **「新增指令碼屬性」**，依序新增以下三項：
+3. 點擊 **「編輯指令碼屬性」** -> **「新增指令碼屬性」**，依序新增以下五項：
 
 | 屬性 (Property)             | 值 (Value)              | 說明                                     |
 | --------------------------- | ----------------------- | ---------------------------------------- |
-| `GIST_FILENAME`             | `自行命名gist檔名.json` | 您的 Gist 檔案名稱                       |
+| `GIST_FILENAME`             | `line-reminder-data.json` | Gist 檔案名稱（前端固定使用此檔名）      |
 | `GITHUB_TOKEN`              | `ghp_xxxx...`           | 您的 GitHub Personal Access Token        |
 | `GIST_ID`                   | `abc123...`             | 您的 Gist ID                             |
 | `LINE_CHANNEL_ACCESS_TOKEN` | `EyJ...`                | 您的 LINE Channel Access Token（長字串） |
