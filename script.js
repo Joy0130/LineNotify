@@ -324,7 +324,10 @@ async function handleFormSubmit(e) {
 
     if(eid) {
         const oldNote = notes.find(n => n.id === eid);
-        if (oldNote && oldNote.datetime === d && wasReminderSentAt(oldNote, d)) {
+        if (isRepeatEndedByEdit(oldNote, tempRepeatSettings)) {
+            isSent = true;
+            finalCompletion = 'completed';
+        } else if (oldNote && oldNote.datetime === d && wasReminderSentAt(oldNote, d)) {
             isSent = true;
             finalCompletion = completion;
         }

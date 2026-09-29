@@ -82,6 +82,12 @@ assertEq('只有排程鎖定但發送失敗，不視為已發送',
                     isoLocal(past)), false);
 assertEq('修改提醒時間後不沿用舊發送狀態',
   wasReminderSentAt({ sent: true, datetime: isoLocal(past) }, isoLocal(future)), false);
+assertEq('重複提醒已發送過，改成沒有重複 → 結束',
+  isRepeatEndedByEdit({ repeat: { type: 'repeat' }, lastSentAt: isoLocal(past) }, null), true);
+assertEq('重複提醒從未發送，改成沒有重複 → 不結束',
+  isRepeatEndedByEdit({ repeat: { type: 'repeat' } }, null), false);
+assertEq('仍保留重複 → 不結束',
+  isRepeatEndedByEdit({ repeat: { type: 'repeat' }, lastSentAt: isoLocal(past) }, { type: 'repeat' }), false);
 assertEq('未來時間 → pending',
   getNoteStatus({ sent: false, datetime: isoLocal(future) }).key, 'pending');
 assertEq('過期超過 3 分鐘 → expired',

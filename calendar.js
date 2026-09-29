@@ -26,6 +26,10 @@ function expandOccurrences(note, rangeStart, rangeEnd) {
         return (base >= rangeStart && base < rangeEnd) ? [base] : [];
     }
 
+    // 每週／每月卻沒選日子是無效設定，不顯示任何時間點
+    if (rep.frequency === 'weekly' && !Array.isArray(rep.weekDays)) return [];
+    if (rep.frequency === 'monthly' && !Array.isArray(rep.monthDays)) return [];
+
     // 時分取自 note.datetime（GAS 推進時保留時分），無法解析時退回 startDate
     const timeSource = base || parseNoteDateTime(rep.startDate);
     if (!timeSource) return [];

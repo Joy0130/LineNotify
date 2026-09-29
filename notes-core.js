@@ -60,6 +60,13 @@ function getNoteStatus(note, occurrenceTime) {
     return NOTE_STATUS_PRESETS.pending;
 }
 
+// 原本是重複提醒且曾發送過，改成沒有重複時，視為整個提醒已結束
+function isRepeatEndedByEdit(oldNote, newRepeat) {
+    const wasRepeat = !!(oldNote && oldNote.repeat && oldNote.repeat.type === 'repeat');
+    const isRepeat = !!(newRepeat && newRepeat.type === 'repeat');
+    return wasRepeat && !isRepeat && !!oldNote.lastSentAt;
+}
+
 function wasReminderSentAt(note, datetime) {
     if (note.datetime !== datetime) return false;
     if (note.sent) return true;
