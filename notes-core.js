@@ -60,6 +60,16 @@ function getNoteStatus(note, occurrenceTime) {
     return NOTE_STATUS_PRESETS.pending;
 }
 
+function wasReminderSentAt(note, datetime) {
+    if (note.datetime !== datetime) return false;
+    if (note.sent) return true;
+    if (note.lastPlanned !== datetime || !note.lastSentAt) return false;
+
+    const plannedAt = parseNoteDateTime(datetime);
+    const sentAt = parseNoteDateTime(note.lastSentAt);
+    return !!plannedAt && !!sentAt && sentAt >= plannedAt;
+}
+
 // 重建與改版前逐字相同的徽章 HTML
 function getStatusBadgeHtml(status) {
     if (!status.iconName) return status.text;

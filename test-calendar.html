@@ -71,6 +71,17 @@ function isoLocal(d) {
 }
 assertEq('sent=true → sent',
   getNoteStatus({ sent: true, datetime: isoLocal(past) }).key, 'sent');
+assertEq('重複提醒目前排程點已成功發送',
+  wasReminderSentAt({ sent: false, datetime: isoLocal(past), lastPlanned: isoLocal(past),
+                      lastSentAt: isoLocal(past) }, isoLocal(past)), true);
+assertEq('重複提醒目前排程點未發送',
+  wasReminderSentAt({ sent: false, datetime: isoLocal(future), lastPlanned: isoLocal(past),
+                      lastSentAt: isoLocal(past) }, isoLocal(future)), false);
+assertEq('只有排程鎖定但發送失敗，不視為已發送',
+  wasReminderSentAt({ sent: false, datetime: isoLocal(past), lastPlanned: isoLocal(past) },
+                    isoLocal(past)), false);
+assertEq('修改提醒時間後不沿用舊發送狀態',
+  wasReminderSentAt({ sent: true, datetime: isoLocal(past) }, isoLocal(future)), false);
 assertEq('未來時間 → pending',
   getNoteStatus({ sent: false, datetime: isoLocal(future) }).key, 'pending');
 assertEq('過期超過 3 分鐘 → expired',

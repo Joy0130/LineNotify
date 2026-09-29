@@ -324,17 +324,9 @@ async function handleFormSubmit(e) {
 
     if(eid) {
         const oldNote = notes.find(n => n.id === eid);
-        if (oldNote && oldNote.sent) {
-            if (oldNote.datetime === d) {
-                isSent = true;
-                finalCompletion = completion; 
-            } else {
-                isSent = false; 
-                finalCompletion = ''; 
-            }
-        } else {
-            isSent = false; 
-            finalCompletion = '';
+        if (oldNote && oldNote.datetime === d && wasReminderSentAt(oldNote, d)) {
+            isSent = true;
+            finalCompletion = completion;
         }
     }
 
