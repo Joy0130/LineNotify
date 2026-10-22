@@ -14,6 +14,19 @@ function getConfig() {
 }
 
 /********************************
+ * 發送時間與重試設定
+ ********************************/
+// 只允許延遲幾分鐘內送出
+const ALLOW_LATE_MINUTES = 3;
+// 發送失敗時，隔幾分鐘重試、最多重試幾次
+const RETRY_INTERVAL_MINUTES = 5;
+const MAX_RETRIES = 3;
+// 最晚可延遲多久補發：涵蓋所有重試的時間。
+// 就算整次執行被 Google 伺服器錯誤中斷、來不及記下重試狀態，
+// 之後的觸發在這段時間內仍會補發，超過才視為錯過
+const MAX_LATE_MINUTES = ALLOW_LATE_MINUTES + RETRY_INTERVAL_MINUTES * MAX_RETRIES;
+
+/********************************
  * 主入口（Trigger）
  ********************************/
 function main() {
@@ -30,7 +43,7 @@ function main() {
 }
 
 /********************************
- * 08:00 ~ 20:30 才執行
+ * 08:00 ~ 20:30 才執行（結束時間再往後延長，讓 20:30 的提醒也能重試完）
  ********************************/
 function isWithinTimeRange(now) {
   // 使用 Utilities.formatDate 取得台北時區的小時和分鐘
@@ -40,7 +53,7 @@ function isWithinTimeRange(now) {
   const totalMinutes = taipeiHour * 60 + taipeiMinute;
 
   const startMinutes = 8 * 60; // 08:00
-  const endMinutes = 20 * 60 + 30; // 20:30
+  const endMinutes = 20 * 60 + 30 + MAX_LATE_MINUTES; // 20:30 + 補發時間
 
   // 避免在深夜執行，減少不必要的 Gist API 呼叫
   return totalMinutes >= startMinutes && totalMinutes <= endMinutes;
@@ -54,9 +67,6 @@ function processNotifications() {
   const notes = raw.notes;
   const now = new Date();
   let updated = false;
-
-  // 只允許延遲幾分鐘內送出，超過就視為錯過（不補發）
-  const ALLOW_LATE_MINUTES = 3;
 
   notes.forEach(item => {
     if (!item.datetime) return;
@@ -101,21 +111,19 @@ function processNotifications() {
       }
     }
 
-    const diffMinutes = (now.getTime() - planned.getTime()) / (1000 * 60);
+    // 重試狀態只屬於當下這個排程點；使用者改過時間就作廢
+    if (item.retryFor && item.retryFor !== item.datetime) clearRetry(item);
 
-    // ❌ 超過允許延遲 → 視為錯過，不補發
-    if (diffMinutes > ALLOW_LATE_MINUTES) {
-      item.lastPlanned = item.datetime; // 鎖住這次排程點
+    // 等待重試中：還沒到重試時間就先跳過
+    const retryAt = item.nextRetryAt ? parseTaipeiTime(item.nextRetryAt) : null;
+    if (retryAt && now < retryAt) return;
 
-      if (isRepeat) {
-        const ok = advanceToNextOccurrence(item, now);
-        if (!ok) {
-          // 重複已結束
-          item.sent = true;
-          // item.completionStatus = 'completed'; // <--- 已移除
-        }
-      }
-      item.updatedAt = toTaipeiISOString(now);
+    // 延遲從「這次該發送的時間」算起：重試中就是重試時間，否則是排程時間
+    const diffMinutes = (now.getTime() - (retryAt || planned).getTime()) / (1000 * 60);
+
+    // ❌ 超過可補發的時間 → 視為錯過，不補發
+    if (diffMinutes > MAX_LATE_MINUTES) {
+      markMissed(item, now, isRepeat);
       updated = true;
       return;
     }
@@ -125,6 +133,7 @@ function processNotifications() {
     
     // 只有在發送成功時才更新狀態
     if (sendSuccess) {
+      clearRetry(item);
       item.lastSentAt = toTaipeiISOString(now);
       item.lastPlanned = item.datetime;
 
@@ -149,9 +158,17 @@ function processNotifications() {
         }
       }
     } else {
-      // 發送失敗：鎖住這次排程點，避免重複嘗試
-      console.error(`   → 鎖定排程點，等待下次觸發時重試`);
-      item.lastPlanned = item.datetime;
+      // 發送失敗：隔一段時間再重試，超過次數才放棄
+      const retryCount = (item.retryCount || 0) + 1;
+      if (retryCount <= MAX_RETRIES) {
+        item.retryCount = retryCount;
+        item.retryFor = item.datetime;
+        item.nextRetryAt = toTaipeiISOString(new Date(now.getTime() + RETRY_INTERVAL_MINUTES * 60 * 1000));
+        console.error(`   → ${RETRY_INTERVAL_MINUTES} 分鐘後重試（第 ${retryCount}/${MAX_RETRIES} 次），時間: ${item.nextRetryAt}`);
+      } else {
+        console.error(`   → 已重試 ${MAX_RETRIES} 次仍失敗，放棄這次提醒`);
+        markMissed(item, now, isRepeat);
+      }
     }
 
     item.updatedAt = toTaipeiISOString(now);
@@ -162,6 +179,29 @@ function processNotifications() {
     raw.lastUpdated = toTaipeiISOString(now);
     updateGistContent(raw);
   }
+}
+
+/********************************
+ * 錯過這次排程點：鎖住它，重複提醒則推進到下一次
+ ********************************/
+function markMissed(item, now, isRepeat) {
+  clearRetry(item);
+  item.lastPlanned = item.datetime; // 鎖住這次排程點
+
+  if (isRepeat) {
+    const ok = advanceToNextOccurrence(item, now);
+    if (!ok) {
+      // 重複已結束
+      item.sent = true;
+    }
+  }
+  item.updatedAt = toTaipeiISOString(now);
+}
+
+function clearRetry(item) {
+  delete item.retryCount;
+  delete item.retryFor;
+  delete item.nextRetryAt;
 }
 
 // 注意：你需要確保 advanceToNextOccurrence 函式存在 (因為原程式碼中似乎漏貼了這個輔助函式)
