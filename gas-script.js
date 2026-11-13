@@ -30,15 +30,24 @@ const MAX_LATE_MINUTES = ALLOW_LATE_MINUTES + RETRY_INTERVAL_MINUTES * MAX_RETRI
  * 主入口（Trigger）
  ********************************/
 function main() {
-
-
-    // 傳入當前時間，讓後續函式使用一致的時間基準
-  if (!isWithinTimeRange(new Date())) return;
-
   try {
+    console.log('開始執行 main');
+
+    if (!isWithinTimeRange(new Date())) {
+      console.log('不在執行時間範圍內');
+      return;
+    }
+
     processNotifications();
+
+    console.log('main 執行完成');
   } catch (e) {
-    console.error('通知流程錯誤:', e);
+    console.error(
+      '通知流程錯誤：' +
+      (e && e.stack ? e.stack : String(e))
+    );
+
+    throw e;
   }
 }
 
@@ -118,8 +127,9 @@ function processNotifications() {
     const retryAt = item.nextRetryAt ? parseTaipeiTime(item.nextRetryAt) : null;
     if (retryAt && now < retryAt) return;
 
-    // 延遲從「這次該發送的時間」算起：重試中就是重試時間，否則是排程時間
-    const diffMinutes = (now.getTime() - (retryAt || planned).getTime()) / (1000 * 60);
+    // 計算「現在時間」與「原本預定通知時間」相差幾分鐘
+    // 例如原訂 10:00 通知，10:05 重試，之後的延遲判斷可能不再以 10:00 為基準。
+    const diffMinutes = (now.getTime() - planned.getTime()) / (1000 * 60);
 
     // ❌ 超過可補發的時間 → 視為錯過，不補發
     if (diffMinutes > MAX_LATE_MINUTES) {
